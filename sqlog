@@ -1,0 +1,992 @@
+#!/usr/bin/perl -w
+#############################################################################
+# $Id$
+#############################################################################
+#
+#  sqlog - 'SLURM Queue Log' or 'SLURM Query Log' Utility
+#
+#  Authors: Adam Moody <moody20@llnl.gov>
+#           Mark Grondona <mgrondona@llnl.gov>
+#
+#############################################################################
+use strict;
+use DBI;
+use File::Basename;
+use Getopt::Long qw/ :config gnu_getopt ignore_case /;
+use Hostlist qw/ expand compress intersect /;
+use Genders;
+use Gendersllnl;
+use Date::Manip;
+
+my $progname = basename $0;
+my %conf;
+
+#############################################################################
+#
+# Usage:
+#
+$conf{usage} = <<EOF
+Usage: $progname [OPTIONS]...
+
+Query information about jobs from the SLURM job log database and/or the 
+current queue of running jobs.
+
+    -j, --jobids=LIST...     Comma-separated list of jobids.
+    -u, --users=LIST...      Comma-separated list of users.
+    -p, --partitions=LIST... Comma-separated list of partitions.
+    -n, --nodes=LIST...      Comma-separated list of nodes or node lists,
+    -J, --job-names=LIST...  Comma-separated list of job names.
+    -s, --states=LIST...     Comma-separated list of job states. 
+                              Use '--states=list' to list valid state names.
+
+    -x, --exclude            Exclude the following list of jobids, users, 
+                              states, partitions, or nodes.
+
+    -N, --nnodes=N           List all jobs that ran on N nodes. N may also
+                              have the form +N, -N, or N-M to specify a min, 
+                              max, or range for nnodes.
+        --minnodes=N         Explicitly specify the minimum number of nodes.
+        --maxnodes=N         Explicitly specify the maximum number of nodes.
+
+    -t, --time, --at=TIME    List jobs which were running at a particular date 
+                              and time. e.g '04/14 13:30:00' or 'today,2pm'.
+                              A window of time may be specified by separating
+                              the start and end time of the window with "--",
+                              e.g.: --time='7-17 1:00'--'7-17 08:00'
+
+    -B, --before=TIME        List all jobs which started on or before TIME.
+    -A, --after=TIME         List all jobs which started on or after TIME.
+
+
+    -T, --runtime=DURATION   List jobs that ran for DURATION. e.g. '4:30:00' or
+                              '4h30m'. DURATION may have the form +N, -N, or
+                              N-M to specify a min, max, or runtime range.
+        --mintime=DURATION   Explicitly specify the minimum runtime.
+        --maxtime=DURATION   Explicitly specify the maximum runtime.
+
+    -R, --running            Include running jobs in output (current queue).
+        --no-db              Include only running jobs (don't query joblog DB).
+
+    -o, --format=LIST        Specify a list of format keys to display or a 
+                              format type, or both using the form 'TYPE:keys,..'
+                              Use --format=list to list valid keys and types.
+
+    -P, --sort=LIST          Specify a list of keys to sort output.
+
+    -L, --limit=N            Limit the number of records to report (default=25).
+    -a, --all                Report all matching records (Same as --limit=0).
+    -H, --no-header          Don't print a header row.
+
+    -h, --help               Display this message.
+    -v, --verbose            Increase output verbosity.
+        --dry-run            Don't actually do anything.
+
+LIST refers to a comma-separated list of words. All options except --format
+which take a LIST argument may also be specified multiple times 
+(e.g. --users=sally,tim --users=frank). Node lists may be specified using
+the host list form, e.g. "host[34-36,67]".
+
+TIME arguments are parsed using the perl Date::Manip(3pm) package, and thus
+may be specified in one of many formats. Examples include '12pm', 
+'yesterday,noon', '12/25-15:30:33', and so on. See the Date::Manip(3pm)
+manpage for more examples.
+
+EOF
+;
+ 
+#############################################################################
+#
+# Configuration:
+#
+
+# DB constants 
+$conf{db}         = "slurm";
+$conf{sqluser}    = "slurm_read";
+$conf{sqlpass}    = "";
+$conf{sqlhost}    = get_sqlhost ();
+
+#  Default max number of rows to fetch:
+$conf{limit}      = 25;
+
+#  Default format list:
+@{$conf{format}}  = qw/ jobid part name user state start runtime nnodes nodes /;
+
+#  Default format type:
+$conf{formattype} = "short";
+
+#  Valid sort keys:
+@{$conf{dbnames}} = qw/ id jobid user uid name state partition limit 
+                        start end nodes nnodes runtime /;
+#  Default sort keys:
+@{$conf{sortkeys}} = qw/ -start /;
+
+#  Array for results:
+@{$conf{results}}= ();
+
+#############################################################################
+#
+#  Format specification for all format types
+#   each entry has the form Name => { Header, format char, width -1 }
+#
+
+$conf{fmt_spec}{short} = { 
+    "jobid"     => { "name" => "JOBID",    "ch" => '>', "l" => 6 },
+    "user"      => { "name" => "USER",     "ch" => '>', "l" => 7 },
+    "name"      => { "name" => "NAME",     "ch" => ">", "l" => 8 },
+    "state"     => { "name" => "ST",       "ch" => ">", "l" => 2 },
+    "partition" => { "name" => "PART",     "ch" => ">", "l" => 5 },
+    "start"     => { "name" => "START",    "ch" => ">", "l" =>13 },
+    "runtime"   => { "name" => "TIME",     "ch" => ">", "l" => 9 },
+    "nnodes"    => { "name" => "N",        "ch" => ">", "l" => 3 },
+    "nodes"     => { "name" => "NODELIST", "ch" => "*", "l" => 1 },
+    "end"       => { "name" => "END",      "ch" => "<", "l" =>13 }
+    };
+
+$conf{fmt_spec}{long} = {
+    "jobid"     => { "name" => "JOBID",    "ch" => '>', "l" => 6 },
+    "user"      => { "name" => "USER",     "ch" => '>', "l" => 7 },
+    "name"      => { "name" => "JOBNAME",  "ch" => ">", "l" => 20},
+    "state"     => { "name" => "STATE",    "ch" => ">", "l" => 8 },
+    "partition" => { "name" => "PARTITION","ch" => ">", "l" => 8 },
+    "start"     => { "name" => "START",    "ch" => ">", "l" =>13 },
+    "runtime"   => { "name" => "TIME",     "ch" => ">", "l" => 8 },
+    "nnodes"    => { "name" => "NODES",    "ch" => ">", "l" => 4 },
+    "nodes"     => { "name" => "NODELIST", "ch" => "*", "l" => 1 },
+    "end"       => { "name" => "END",      "ch" => "<", "l" =>13 }
+   };
+
+$conf{fmt_spec}{freeform} = {
+    "jobid"     => { "name" => "JOBID",    "ch" => '*', "l" => 1 },
+    "user"      => { "name" => "USER",     "ch" => '*', "l" => 1 },
+    "name"      => { "name" => "JOBNAME",  "ch" => "*", "l" => 1 },
+    "state"     => { "name" => "STATE",    "ch" => "*", "l" => 1 },
+    "partition" => { "name" => "PARTITION","ch" => "*", "l" => 1 },
+    "start"     => { "name" => "START",    "ch" => "*", "l" => 1 },
+    "runtime"   => { "name" => "TIME",     "ch" => "*", "l" => 1 },
+    "nnodes"    => { "name" => "NODES",    "ch" => "*", "l" => 1 },
+    "nodes"     => { "name" => "NODELIST", "ch" => "*", "l" => 1 },
+    "end"       => { "name" => "END",      "ch" => "*", "l" => 1 }
+   };
+
+# Short aliases for format specifiers
+#
+$conf{fmt_spec}{aliases} = {
+        "jid" => "jobid", "part" => "partition", "st" => "state",
+        "time" => "runtime", "N" => "nnodes" };
+
+
+#############################################################################
+#
+#  State keys:
+#
+$conf{state_names} = {
+    "COMPLETED"   => [ qw/ cd comp / ],
+    "FAILED"      => [ qw/ f  fail / ],
+    "CANCELLED"   => [ qw/ ca canc / ],
+    "NODE_FAIL"   => [ qw/ nf node / ],
+    "TIMEOUT"     => [ qw/ to time / ],
+    "RUNNING"     => [ qw/ r  run  / ],
+    "COMPLETING"  => [ qw/ cg cng  / ],
+};
+
+for my $st (keys %{$conf{state_names}}) {
+    # Map abbreviation for state back to full state name:
+    map { $conf{state_keys}{$_} = $st } (@{$conf{state_names}{$st}}, lc $st);
+}
+
+#############################################################################
+#
+#  Main program:
+#
+
+#  Initialize Date::Manip:
+Date_Init ();
+
+parse_cmdline ();
+
+#  Initialize DBI:
+$conf{dbh}  = dbh_init ();
+
+#  Compose a query based on options:
+$conf{stmt} = compose_query ($conf{dbh}) 
+                or log_fatal ("Failed to generate query\n");
+
+log_verbose ("Running query: \"$conf{stmt}\"\n");
+
+#  Don't do anymore if --dry-run was specified.
+exit 0 if ($conf{dry_run});
+
+#  Query running jobs if requested
+query_running_jobs () if ($conf{do_running});
+
+#  Execute DB query and grab results:
+if (  (!$conf{limit} || scalar @{$conf{results}} < $conf{limit}) 
+    && !$conf{nodb}) {
+    run_query ();
+}
+
+#  Sort by requested keys
+log_verbose ("sorting by keys @{$conf{sortkeys}}\n");
+@{$conf{results}} = sort sort_by_keys (@{$conf{results}});
+
+#  Apply any post-processing to results fields:
+reformat_results (@{$conf{results}});
+
+#  Create output format based on user options:
+format_create ();
+
+#  Output results:
+write () for (@{$conf{results}});
+
+exit 0;
+
+#############################################################################
+#
+#  Functions:
+#
+sub parse_cmdline 
+{
+    my @sortkeys                  = ();
+    my $attime                    = "";
+    my $runtime                   = "";
+
+    $conf{got_exclude}            = 0;
+
+    @{$conf{userfmt}}             = ();
+    @{$conf{jobids}}              = ();
+    @{$conf{users}}               = ();
+    @{$conf{states}}              = ();
+    @{$conf{partitions}}          = ();
+    @{$conf{nodes}}               = ();
+    @{$conf{job_names}}           = ();
+    @{$conf{exclude}{jobids}}     = ();
+    @{$conf{exclude}{users}}      = ();
+    @{$conf{exclude}{states}}     = ();
+    @{$conf{exclude}{partitions}} = ();
+    @{$conf{exclude}{nodes}}      = ();
+    @{$conf{exclude}{job_names}}  = ();
+
+    $conf{time1}                  = 0;
+    $conf{time2}                  = 0;
+    $conf{before}                 = 0;
+    $conf{after}                  = 0;
+    $conf{numnodes}               = -1;
+    $conf{minnodes}               = -1;
+    $conf{maxnodes}               = -1;
+    $conf{runtime}                = -1;
+    $conf{mintime}                = -1;
+    $conf{maxtime}                = -1;
+    $conf{listall}                = 0;
+    $conf{dry_run}                = 0;
+    $conf{noheader}               = 0;
+    $conf{do_running}             = 0;
+    $conf{nodb}                   = 0;
+    $conf{verbose}                = 0;
+    $conf{help}                   = 0;
+
+    my $rc = GetOptions (
+        "help|h"         => \$conf{help},
+        "dry-run"        => \$conf{dry_run},
+        "no-header|H"    => \$conf{noheader},
+        "verbose|v+"     => \$conf{verbose},
+        "exclude|x"      => \$conf{got_exclude},
+        "limit|L=i"      => \$conf{limit},
+        "running|R"      => \$conf{do_running},
+        "no-db"          => \$conf{nodb},
+        "time|at|t=s"    => \$attime,
+        "runtime|T=s"    => \$runtime,
+        "mintime=s"      => sub { $runtime = "+$_[1]"   },
+        "maxtime=s"      => sub { $runtime = "-$_[1]"   },
+        "all|a"          => sub { $conf{limit} = 0      },
+        "jobids|j=s"     => sub { append_excluded (@_); },
+        "job-names|J=s"  => sub { append_excluded (@_); },
+        "users|u=s"      => sub { append_excluded (@_); },
+        "states|s=s"     => sub { append_excluded (@_); },
+        "partitions|p=s" => sub { append_excluded (@_); },
+        "nodes|n=s"      => sub { append_excluded (@_); },
+        "format|o=s"     => sub { @{$conf{userfmt}} = split(/,/, $_[1]); },
+        "sort|P=s"       => sub { @sortkeys = split(/,/, $_[1]); },
+        "before|B=s"     => sub { set_time ("before", $_[1]); },
+        "after|A=s"      => sub { set_time ("after",  $_[1]); },
+        "nnodes|N=s"     => sub { set_nnodes ($_[1]);   },
+        "minnodes=s"     => sub { set_nnodes ("+$_[1]") },
+        "maxnodes=s"     => sub { set_nnodes ("-$_[1]") },
+        );
+
+    usage () if $conf{help} || !$rc;
+
+    parse_time_range ($attime) if ($attime);
+
+    parse_runtime ($runtime) if ($runtime);
+
+    $conf{limit} = $conf{listlimit} if $conf{listlimit};
+
+    $conf{do_running} = 1 if $conf{nodb};
+
+    check_format_list (@{$conf{userfmt}}) or exit 1 if (@{$conf{userfmt}});
+
+    check_state_lists () or exit 1;
+
+    check_sort_keys (@sortkeys) or exit 1;
+
+    for my $name (qw/ jobids users states partitions nodes /) {
+        log_verbose ("$name: @{$conf{$name}}\n") if @{$conf{$name}};
+        log_verbose ("excluded $name: @{$conf{exclude}{$name}}\n") 
+            if @{$conf{exclude}{$name}};
+    } 
+
+
+}
+
+sub list_valid_sort_keys
+{
+    log_msg ("Valid sort keys (prepend with '-' to reverse sort): \n", 
+              join (', ', @{$conf{dbnames}}), "\n");
+}
+
+sub check_sort_keys
+{
+    my (@keys) = @_;
+    my $failed = 0;
+
+    @keys = @{$conf{sortkeys}} if (!@keys);
+
+    for my $key (@keys) {
+        #  Remove leading '-' if it exists and specify reverse sort
+        #   for this key:
+        #
+        $conf{sortreverse}{$key}++ if ($key =~ s/^-//);
+
+        #  Check for key in list of valid keys:
+        #
+        next if grep { $_ eq $key } @{$conf{dbnames}};
+
+        log_error ("Invalid sort key '$key' specified.\n");
+        $failed++;
+    }
+
+    if ($failed) {
+        list_valid_sort_keys ();
+        return 0;
+    }
+
+    @{$conf{sortkeys}} = @keys;
+    return 1;
+}
+
+sub list_valid_states 
+{
+    my @keys = ();
+
+    print STDERR "$progname: Valid state keys: ";
+
+    for my $st (sort keys %{$conf{state_names}}) {
+        push @keys, join ('|', ($st, @{$conf{state_names}{$st}}));
+    }
+
+    print STDERR join ', ', @keys;
+    print STDERR "\n";
+}
+
+
+sub check_state_lists
+{
+    my $failed = 0;
+
+    for my $state (@{$conf{states}}, @{$conf{exclude}{states}}) {
+        if (!exists $conf{state_keys}{lc $state}) {
+            log_error ("Invalid state \"$state\" specified.\n");
+            $failed++;
+        }
+    }
+
+    if ($failed) {
+        list_valid_states ();
+        return 0;
+    }
+
+    @{$conf{states}} = map { $conf{state_keys}{lc $_} } @{$conf{states}};
+    @{$conf{exclude}{states}} = 
+                       map { $conf{state_keys}{lc $_} } @{$conf{exclude}{states}};
+
+    return 1;
+}
+
+sub list_format_keys
+{
+    print STDERR "$progname: Valid format keys: ";
+    my @keys = ();
+    for my $f (keys %{$conf{fmt_spec}{short}}) {
+        my @a = grep { $conf{fmt_spec}{aliases}{$_} eq $f } 
+                    keys %{$conf{fmt_spec}{aliases}};
+                    
+        push @keys, join '|', (@a, $f);
+    }
+    print STDERR join ', ', @keys;
+    print STDERR "\n";
+
+    print STDERR "$progname: Valid format types: ", 
+                 join ',', grep { !/alias/ } keys %{$conf{fmt_spec}};
+    print STDERR "\n";
+}
+
+sub check_format_list
+{
+    my $rc = 1;
+
+    if (  (grep { $_[0] eq $_ } keys %{$conf{fmt_spec}})
+       || ($_[0] =~ s/^(\w+)://)) {
+        $conf{formattype} = $1 ||  shift @_;
+        log_verbose ("set formattype = $conf{formattype}\n");
+        log_fatal ("Invalid format type = \"$conf{formattype}\"\n") 
+           unless exists $conf{fmt_spec}{$conf{formattype}};
+    }
+
+    log_verbose ("formats = @_\n");
+
+    for my $f (@_) {
+        list_format_keys(), exit if ($f eq "list");
+
+        next unless $f;
+        
+        if (  !exists $conf{fmt_spec}{aliases}{$f}
+           && !exists $conf{fmt_spec}{short}{$f} ) {
+           log_error ("Invalid format key \"$f\"\n");
+           $rc = 0;
+        }
+    }
+
+    # reset format if  there's anything on the list
+    @{$conf{format}} = @_ if (@_);
+
+    return $rc;
+}
+
+sub set_nnodes
+{
+    my ($nnodes) = @_;
+
+    if ($nnodes =~ s/^\+(\d+)$/$1/) {
+        $conf{minnodes} = $nnodes;
+    } 
+    elsif ($nnodes =~ s/^-(\d+)/$1/) {
+        $conf{maxnodes} = $nnodes;
+    }
+    elsif ($nnodes =~ /^(\d+)-(\d+)$/) {
+        $conf{minnodes} = $1;
+        $conf{maxnodes} = $2;
+    }
+    elsif ($nnodes =~ /^\d+$/)  {
+        $conf{numnodes} = $nnodes;
+    }
+    else {
+        log_fatal ("--nnodes: Invalid argument: $nnodes\n");
+    }
+}
+
+sub set_time
+{
+    my ($name, $arg) = @_;
+    my $date = parse_date ($arg)
+        or log_fatal ("Invalid date string \"$arg\"\n");
+
+    $conf{$name} = UnixDate ($date, "%Y-%m-%d %H:%M:%S");
+
+    log_verbose ("$name = $conf{$name}\n");
+}
+
+sub parse_runtime
+{
+    my ($arg) = @_;
+
+    if ($arg =~ s/^\+([^-]+)$/$1/) {
+        $conf{mintime} = duration_to_seconds ($arg);
+        log_fatal ("Invalid min runtime specified: $arg\n") 
+            if !defined $conf{mintime};
+    } 
+    elsif ($arg =~ s/^-<([^-]+)/$1/) {
+        $conf{maxtime} = duration_to_seconds ($arg);
+        log_fatal ("Invalid max runtime specified: $arg\n") 
+            if !defined $conf{maxtime};
+    }
+    elsif ($arg =~ /^([^-]+)-([^-]+)$/) {
+        $conf{mintime} = duration_to_seconds ($1);
+        $conf{maxtime} = duration_to_seconds ($2);
+        log_fatal ("Invalid max runtime specified: $1\n") 
+            if !defined $conf{maxtime};
+        log_fatal ("Invalid min runtime specified: $2\n") 
+            if !defined $conf{mintime};
+    }
+    else {
+        $conf{runtime} = duration_to_seconds ($arg);
+        log_fatal ("Invalid runtime specified: $arg\n") 
+            if !defined $conf{runtime};
+    }
+}
+
+#
+#  Convert a duration to seconds. 
+#
+#  Valid duration strings include the common SLURM form D-HH:MM:SS
+#    or the form 3H
+#
+sub duration_to_seconds
+{
+    my ($t) = @_;
+    my ($d, $h, $m, $s) = 
+       ($t =~ /^(\d*?)[dD:-]?(\d*?)[hH:]?(\d*?)[mM:]?(\d*)s?$/) 
+       or return undef;
+
+    log_debug ("duration_to_seconds ($t): d=$d h=$h m=$m s=$s\n");
+
+    return (($s||0) + ($m||0) * 60 + ($h||0) * 3600 + ($d||0) * 3600 * 24);
+}
+
+sub parse_time_range
+{
+    my ($time) = @_;
+
+    my @t = split (/--/, $time);
+
+    log_fatal ("Invalid date and time or range: $time\n") if (@t > 2);
+
+    set_time ("time1", $t[0]);
+    set_time ("time2", $t[1]) if $t[1];
+}
+
+sub append_excluded
+{
+    my ($name, $arg) = @_;
+    my $exclude = $conf{got_exclude};
+
+    $name =~ s/-/_/g;
+
+    my $list = $exclude ? $conf{exclude}{$name} : $conf{$name};
+
+    if ($name ne "nodes")  {
+        push (@$list, split (/,/, $arg));
+    } 
+    else  {
+        push (@$list, expand ($arg));
+    }
+
+    # Nullify exclude for next argument
+    $conf{got_exclude} = 0;
+}
+
+sub format_runtime
+{
+    my ($t) = @_;
+
+    my $sec = $t % 60;
+    my $min = ($t / 60)   % 60;
+    my $hrs = ($t / 3600) % 24;
+    my $dys = $t / 86400;
+
+    int $dys && return sprintf ("%d-%2.2d:%2.2d:%2.2d", $dys, $hrs, $min, $sec);
+    int $hrs && return sprintf (      "%d:%2.2d:%2.2d", $hrs, $min, $sec);
+    int $min && return sprintf (            "%d:%2.2d", $min, $sec);
+    return sprintf             (              ":%2.2d", $sec);
+}
+
+sub format_create
+{
+    my $common = "";
+    my $format = "";
+    my $format_top = "";
+    my $values = "";
+
+    my @form = @{$conf{format}};
+    
+    my $fmt = $conf{fmt_spec}{$conf{formattype}};
+    my $alias = $conf{fmt_spec}{aliases};
+
+    for my $f (@form) {
+        $f = $$alias{$f} if (!exists $$fmt{$f});
+        if (!exists $$fmt{$f}) {
+            log_error ("Skipping invalid format key \"$f\"\n");
+        }
+        $common .= "@" . $$fmt{$f}{ch} x $$fmt{$f}{l} . " ";
+    }
+    $common .= "\n";
+
+
+    $format = "format STDOUT = \n";
+    $format .= $common;
+    $format .= join ',', map { '$$_{' . $_  . '}' } @form;
+    $format .= "\n.\n";
+
+    $format_top = "format STDOUT_TOP = \n";
+    $format_top .= $common;
+    $format_top .= join ',', map { '"' . $$fmt{$_}{name} . '"' } @form;
+    $format_top .= "\n.\n";
+
+    eval $format;
+    eval $format_top unless $conf{noheader};
+}
+
+sub nodes_not_included
+{
+    my (@nodes) = expand (@_);
+    
+    if (@{$conf{nodes}} && !intersect (\@nodes, \@{$conf{nodes}})) {
+        return 1;
+    }
+
+    if (  @{$conf{exclude}{nodes}} 
+       && intersect (\@nodes, \@{$conf{exclude}{nodes}})) {
+       return 1;
+    }
+
+    return 0;
+}
+
+sub state_name 
+{
+    my ($s) = @_;
+    my %states = (
+        "COMPLETED" => { "short" => "CD", "long" => "completed" },
+        "FAILED"    => { "short" => "F",  "long" => "failed"   }, 
+        "CANCELLED" => { "short" => "CA", "long" => "cancelled" }, 
+        "NODE_FAIL" => { "short" => "NF", "long" => "nodefail" },
+        "TIMEOUT"   => { "short" => "TO", "long" => "timeout"  },
+        "RUNNING"   => { "short" => "R",  "long" => "running" },
+        "COMPLETING"=> { "short" => "CG", "long" => "completing" }
+    );
+    log_error ("Unknown state \"$s\"\n") if (!exists $states{$s});
+    my $l = $conf{formattype} eq "short" ? "short" : "long";
+    return $states{$s}{$l}; 
+}
+##############################################################################
+#
+#  Sort Routines
+#
+
+$conf{datecache} = ();
+
+sub parse_date
+{
+    my ($date) = @_;
+    return $conf{datecache}{$date} if (exists $conf{datecache}{$date});
+    return $conf{datecache}{$date} = ParseDate ($date);
+}
+
+sub sort_date
+{
+    my ($d1, $d2) = @_;
+    return Date_Cmp (parse_date ($d1), parse_date ($d2));
+}
+
+sub sort_start   { return sort_date ($$a{start}, $$b{start}); }
+sub sort_end     { return sort_date ($$a{end}, $$b{end}); }
+sub sort_runtime { return $$a{runtime} <=> $$b{runtime}; }
+sub sort_id      { return $$a{id}||0 <=> $$b{id}||0 };
+sub sort_jobid   { return $$a{jobid} <=> $$b{jobid} };
+sub sort_limit   { return $$a{limit} cmp $$b{limit} };
+sub sort_user    { return $$a{user} cmp $$b{user} };
+sub sort_uid     { return $$a{uid} <=> $$b{uid} };
+sub sort_name    { return $$a{name} cmp $$b{name} };
+sub sort_state   { return $$a{state} cmp $$b{state} };
+sub sort_partition { return $$a{partition} cmp $$b{partition} };
+sub sort_nodes   { return $$a{nodes} cmp $$b{nodes} };
+sub sort_nnodes  { return $$a{nnodes} <=> $$b{nnodes} };
+
+sub sort_by_keys
+{
+    my $rc = 0;
+    no strict 'refs';
+
+    for (@{$conf{sortkeys}}) {
+        $rc = &{"sort_$_"} ($a, $b);
+        return ($conf{sortreverse}{$_} ? -$rc : $rc) if ($rc);
+    }
+    return $rc;
+}
+
+sub sort_by_start
+{
+    # create a cache of Date::Manip  objects
+    $$_{startdate} = parse_date ($$_{start}) for (@_);
+    
+    # sort by start date
+    sort { Date_Cmp ($$a{startdate}, $$b{startdate}) } @_; 
+}
+
+##############################################################################
+#
+# DB routines
+#
+sub reformat_results
+{
+    my (@rows) = @_;
+    for my $r (@rows) {
+        # Drop year for shorter start and end times.
+        $$r{end} =~ s#^(\d+)-(\d+)-(\d+) #$2/$3-#;
+        $$r{start} =~ s#^(\d+)-(\d+)-(\d+) #$2/$3-#;
+
+        $$r{runtime} = format_runtime ($$r{runtime});
+
+        # Alternate state name
+        $$r{state} = state_name ($$r{state});
+    }
+}
+
+sub run_query
+{
+    my $sth = $conf{dbh}->prepare ($conf{stmt});
+
+    $sth->execute () or log_fatal ("Aborting.\n");
+    log_verbose ("Success.\n");
+
+    my @names = qw/ id jobid user uid name state partition limit start end 
+                    nodes nnodes runtime /;
+
+    my $count = 0;
+    while (my @vals = $sth->fetchrow_array ()) {
+        my %r = ();
+        @r{@names} = @vals;
+
+        next if nodes_not_included ($r{nodes});
+
+        push (@{$conf{results}}, \%r);
+        $count++;
+
+        last if ($conf{limit} && ($#{$conf{results}} > $conf{limit} - 1));
+    }
+
+    log_verbose ("Fetched $count rows.\n");
+}
+
+#
+#  Get cluster's "sqlhost" (altmgmt node for now)
+#   (Returns the ethernet hostname for the node, if available)
+#
+sub get_sqlhost
+{
+    my $genders = Genders->new();
+    my $host = "";
+    
+    ($host) = $genders->getnodes("altmgmt") or 
+      ($host) = $genders->getnodes("mgmt") or
+      log_fatal ("Failed to get SQL host from (alt)mgmt genders attribute.\n");
+
+    my $server = $genders->getattrval("altname", $host);
+
+    return $server;
+}
+
+sub dbh_init
+{
+    my $dbh = DBI->connect ("DBI:mysql:database=$conf{db};host=$conf{sqlhost}",
+                            $conf{sqluser}, $conf{sqlpass})
+        or log_fatal("Failed to connect to DB at $conf{sqlhost}\n");
+
+    log_verbose ("Connected to database $conf{db} at host $conf{sqlhost}\n");
+
+    return $dbh;
+}
+
+sub quote_list
+{
+    my ($dbh, @list) = @_;
+    return "(" . join (',', (map { $dbh->quote ($_) } @list)) . ")";
+}
+
+sub stmt_list
+{
+    my ($dbh, $excluded) = @_;
+    my %names = (
+        "jobids"     => "jobid",
+        "users"      => "username",
+        "states"     => "jobstate",
+        "partitions" => "partition",
+        "job_names"  => "jobname" );
+
+    my @result = ();
+
+    my $in = $excluded ? "NOT IN" : "IN";
+
+    # For all keys in %names:
+    #  - Choose included or excluded list
+    #  - skip empty lists
+    #  - generate one list entry with "NAME (NOT) IN ( 'item', ... )"
+    #
+    for my $name (keys %names) {
+        my $list = $excluded ? \@{$conf{exclude}{$name}} : \@{$conf{$name}};
+        next unless @$list;
+        push (@result, "$names{$name} $in " . quote_list ($dbh, @$list));
+    }
+
+    return (@result);
+}
+
+sub compose_query 
+{
+    my ($dbh) = @_;
+
+    #
+    # Generate list of statements for included and excluded jobids, users,
+    #  states, and partitions:
+    #
+    my @stmts = (stmt_list ($dbh, 0), stmt_list ($dbh, 1));
+    my @have = ();
+
+    if ($conf{time1} and $conf{time2}) {
+        # all jobs which did not end before t1 and start after t2
+        push (@stmts, "(NOT (endtime < " . $dbh->quote($conf{time1}) . " OR " .
+                      "starttime > " . $dbh->quote($conf{time2}) . "))");
+    } elsif ($conf{time1}) {
+        push (@stmts, "starttime <= " . $dbh->quote ($conf{time1}) . " AND " .
+                      "endtime >= "   . $dbh->quote ($conf{time1}));
+    }
+
+    if ($conf{before}) { 
+        push (@stmts, "starttime <= " .  $dbh->quote ($conf{before})); 
+    }
+    if ($conf{after})  { 
+        push (@stmts, "starttime >= " . $dbh->quote ($conf{after})); 
+    }
+
+    if ($conf{numnodes} >= 0) { 
+        push @stmts, "nodecount = "  . $dbh->quote($conf{numnodes});
+    }
+    if ($conf{minnodes} >= 0) { 
+        push @stmts, "nodecount >= " . $dbh->quote($conf{minnodes});
+    }
+    if ($conf{maxnodes} >= 0) { 
+        push @stmts, "nodecount <= " . $dbh->quote($conf{maxnodes});
+    }
+
+    if ($conf{runtime} >= 0) { 
+        push @have, "runtime = "  . $dbh->quote($conf{runtime});
+    }
+    if ($conf{mintime} >= 0) { 
+        push @have, "runtime >= " . $dbh->quote($conf{mintime});
+    }
+    if ($conf{maxtime} >= 0) { 
+        push @have, "runtime <= " . $dbh->quote($conf{maxtime});
+    }
+
+    my $stmt = "SELECT *," .
+               "UNIX_TIMESTAMP(endtime)-UNIX_TIMESTAMP(starttime) " .
+               "as runtime FROM slurm_job_log";
+
+    $stmt .= " WHERE " . join " AND ", @stmts if (@stmts);
+    $stmt .= " HAVING " . join " AND ", @have if (@have);
+    $stmt .= " ORDER BY starttime DESC";
+
+    if ($conf{limit} && !@{$conf{nodes}} && !@{$conf{exclude}{nodes}}) {
+        $stmt .= " LIMIT " . ($conf{listlimit} || $conf{limit});
+    }
+
+    return ($stmt);
+}
+
+##############################################################################
+#
+#  Query running jobs with squeue.
+#
+sub var_not_included
+{
+    my ($var, $val) = @_;
+
+    if (@{$conf{$var}} && ! grep (/^$val$/i, @{$conf{$var}})) {
+        return 1;
+    }
+
+    if (@{$conf{exclude}{$var}} && grep (/^$val$/i, @{$conf{exclude}{$var}})) {
+        return 1;
+    }
+
+    return 0;
+}
+
+sub job_not_included
+{
+    my ($r) = @_;
+
+    for my $var (qw/jobids users states partitions/) {
+        (my $key = $var) =~ s/s$//;
+        return 1 if var_not_included ($var, $$r{$key});
+    }
+    return 0;
+}
+
+sub query_running_jobs
+{
+    my @names = qw/ jobid user uid name state partition limit start end 
+                        nodes nnodes runtime /;
+
+    my $sfmt = "%i::%u::%U::%j::%T::%P::%l::%S::%e::%N::%D::%M";
+
+    my $cmd = "squeue -h -t running,completing -o $sfmt";
+
+    my $time1  = parse_date ($conf{time1});
+    my $time2  = parse_date ($conf{time2});
+    my $before = parse_date ($conf{before});
+    my $after  = parse_date ($conf{after});
+
+    open (SQ, "$cmd |") or log_error ("Failed to run squeue: $!\n");
+
+    while (<SQ>) {
+        my %r = ();
+        chomp;
+        @r{@names} = split (/::/, $_);
+
+        $r{runtime} = duration_to_seconds ($r{runtime});
+
+        if ($time1 && $time2) {
+            # all jobs which did not end before t1 and start after t2
+            my $start = parse_date ($r{start});
+            my $end = parse_date ($r{end});
+            next if (Date_Cmp ($start, $time2) > 0);
+            next if (Date_Cmp ($end,   $time1) < 0);
+        } elsif ($time1) {
+            my $start = parse_date ($r{start});
+            my $end = parse_date ($r{end});
+            next unless (Date_Cmp ($start, $time1) <= 0);
+            next unless (Date_Cmp ($end,   $time1) >= 0);
+        }
+
+        if ($conf{before}) {
+            my $start = parse_date ($r{start});
+            next unless (Date_Cmp ($start, $before) <= 0);
+        }
+
+        if ($conf{after}) {
+            my $start = parse_date ($r{start});
+            next unless (Date_Cmp ($start, $after) >= 0);
+        }
+
+        next if (($conf{numnodes} >= 0) && !($r{nnodes} == $conf{numnodes}) );
+        next if (($conf{minnodes} >= 0) && !($r{nnodes} >= $conf{minnodes}) );
+        next if (($conf{maxnodes} >= 0) && !($r{nnodes} <= $conf{maxnodes}) );
+
+        next if (($conf{runtime} >= 0)  && !($r{runtime} == $conf{runtime}) );
+        next if (($conf{mintime} >= 0)  && !($r{runtime} >= $conf{mintime}) );
+        next if (($conf{maxtime} >= 0)  && !($r{runtime} <= $conf{maxtime}) );
+
+        next if nodes_not_included ($r{nodes});
+
+        next if job_not_included (\%r);
+
+        push (@{$conf{results}}, \%r);
+
+        last if ($conf{limit} && ($#{$conf{results}} > $conf{limit} - 1));
+    }
+
+    close (SQ);
+}
+
+##############################################################################
+#
+# Logging functions
+#
+sub log_msg     { print STDERR "$progname: ", @_; }
+sub log_verbose { log_msg (@_) if ($conf{verbose} > 0); }
+sub log_debug   { log_msg (@_) if ($conf{verbose} > 1); }
+sub log_error   { log_msg (@_) }
+sub log_fatal   { log_msg (@_); exit 1; }
+sub usage       { print STDERR $conf{usage}; exit 0; }
+
+# vi: ts=4 sw=4 expandtab
