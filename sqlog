@@ -262,9 +262,9 @@ sub parse_cmdline
     my $endtime                   = "";
     my $minendtime                = "";
     my $maxendtime                = "";
-    my $runtime                   = -1;
-    my $minruntime                = -1;
-    my $maxruntime                = -1; 
+    my $runtime                   = "";
+    my $minruntime                = "";
+    my $maxruntime                = ""; 
     my $attime                    = "";
 
     my @timevals                  = qw/ min t0 max /;
@@ -588,9 +588,9 @@ sub parse_runtime
 {
     my ($time, $min, $max) = @_;
 
-    return if ($time < 0 && $min < 0 && $max < 0);
+    return if ($time eq "" && $min eq "" && $max eq "");
 
-    if ($time >= 0 && ($min >= 0 || $max >= 0)) {
+    if ($time ne "" && ($min ne "" || $max ne "")) {
         log_fatal ("Do not specify --runtime with --mintime or --maxtime.\n");
     }
 
@@ -628,10 +628,10 @@ sub parse_runtime
 sub format_minmax_string 
 {
     my ($val, $min, $max) = @_;
-    return ($val) if ($val >= 0);
-    return ("$min-$max") if ($min >= 0 && $max >= 0);
-    return ("-$max")     if ($max >= 0);
-    return ("+$min")     if ($min >= 0); 
+    return ($val) if ($val ne "");
+    return ("$min-$max") if ($min ne "" && $max ne "");
+    return ("-$max")     if ($max ne "");
+    return ("+$min")     if ($min ne ""); 
     return "";
 }
 
@@ -645,7 +645,7 @@ sub duration_to_seconds
 {
     my ($t) = @_;
     my ($d, $h, $m, $s) = 
-       ($t =~ /^(\d*?)[dD:-]?(\d*?)[hH:]?(\d*?)[mM:]?(\d*)s?$/) 
+       ($t =~ /^(\d*?)[dD:-]?(\d*?)[hH:]?(\d*?)[mM:]?(\d*)[sS]?$/) 
        or return undef;
 
     log_debug ("duration_to_seconds ($t): d=$d h=$h m=$m s=$s\n");

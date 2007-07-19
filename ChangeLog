@@ -1,3 +1,11 @@
+2007-07-19 Adam Moody <moody20@llnl.gov>
+
+	* sqlog : Added support for 'S' in time duration, only 's' was working.
+
+	* sqlog : Changed comparison for runtime, minruntime, and maxruntime
+	 to string equality tests of "eq" and "ne" since numeric operators of ">"
+	 would get confused for input such as -T +1h.
+
 2007-07-19 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog : New options --start, --start-before, --start-after,
