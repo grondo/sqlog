@@ -54,8 +54,17 @@ current queue of running jobs.
                               the start and end time of the window with "--",
                               e.g.: --time='7-17 1:00'--'7-17 08:00'
 
-    -B, --before=TIME        List all jobs which started on or before TIME.
-    -A, --after=TIME         List all jobs which started on or after TIME.
+    -S, --start=TIME         List all jobs that started at TIME. TIME may have
+                              the form +T, -T, or T1--T2 to specify min, max,
+                              or start time range.
+        --start-before=TIME  Explicitly specify maximum start time.
+        --start-after=TIME   Explicitly specify minimum start time.
+
+    -E, --end=TIME           List all jobs that ended at TIME. TIME may have
+                              the form +T, -T, or T1--T2 to specify a min, max,
+                              or end time range.
+        --end-before=TIME    Explicitly specify maximum end time.
+        --end-after=TIME     Explicitly specify minimum end time.
 
 
     -T, --runtime=DURATION   List jobs that ran for DURATION. e.g. '4:30:00' or
@@ -64,7 +73,7 @@ current queue of running jobs.
         --mintime=DURATION   Explicitly specify the minimum runtime.
         --maxtime=DURATION   Explicitly specify the maximum runtime.
 
-    -R, --running            Include running jobs in output (current queue).
+    -X, --no-running         Don't query running jobs (no current queue).
         --no-db              Include only running jobs (don't query joblog DB).
 
     -o, --format=LIST        Specify a list of format keys to display or a 
@@ -217,7 +226,7 @@ log_verbose ("Running query: \"$conf{stmt}\"\n");
 exit 0 if ($conf{dry_run});
 
 #  Query running jobs if requested
-query_running_jobs () if ($conf{do_running});
+query_running_jobs () unless ($conf{no_running});
 
 #  Execute DB query and grab results:
 if (  (!$conf{limit} || scalar @{$conf{results}} < $conf{limit}) 
@@ -247,8 +256,18 @@ exit 0;
 sub parse_cmdline 
 {
     my @sortkeys                  = ();
+    my $starttime                 = "";
+    my $maxstarttime              = "";
+    my $minstarttime              = "";
+    my $endtime                   = "";
+    my $minendtime                = "";
+    my $maxendtime                = "";
+    my $runtime                   = -1;
+    my $minruntime                = -1;
+    my $maxruntime                = -1; 
     my $attime                    = "";
-    my $runtime                   = "";
+
+    my @timevals                  = qw/ min t0 max /;
 
     $conf{got_exclude}            = 0;
 
@@ -268,8 +287,8 @@ sub parse_cmdline
 
     $conf{time1}                  = 0;
     $conf{time2}                  = 0;
-    $conf{before}                 = 0;
-    $conf{after}                  = 0;
+    $conf{starttime}{@timevals}   = 0;
+    $conf{endtime}{@timevals}     = 0;
     $conf{numnodes}               = -1;
     $conf{minnodes}               = -1;
     $conf{maxnodes}               = -1;
@@ -279,7 +298,7 @@ sub parse_cmdline
     $conf{listall}                = 0;
     $conf{dry_run}                = 0;
     $conf{noheader}               = 0;
-    $conf{do_running}             = 0;
+    $conf{no_running}             = 0;
     $conf{nodb}                   = 0;
     $conf{verbose}                = 0;
     $conf{help}                   = 0;
@@ -291,12 +310,22 @@ sub parse_cmdline
         "verbose|v+"     => \$conf{verbose},
         "exclude|x"      => \$conf{got_exclude},
         "limit|L=i"      => \$conf{limit},
-        "running|R"      => \$conf{do_running},
+        "no-running|X"   => \$conf{no_running},
         "no-db"          => \$conf{nodb},
         "time|at|t=s"    => \$attime,
+
         "runtime|T=s"    => \$runtime,
-        "mintime=s"      => sub { $runtime = "+$_[1]"   },
-        "maxtime=s"      => sub { $runtime = "-$_[1]"   },
+        "mintime=s"      => \$minruntime,
+        "maxtime=s"      => \$maxruntime,
+
+        "start|S=s"      => \$starttime,
+        "start-after=s"  => \$minstarttime,
+        "start-before=s" => \$maxstarttime,
+
+        "end|E=s"        => \$endtime,
+        "end-after=s"    => \$minendtime,
+        "end-before=s"   => \$maxendtime,
+
         "all|a"          => sub { $conf{limit} = 0      },
         "jobids|j=s"     => sub { append_excluded (@_); },
         "job-names|J=s"  => sub { append_excluded (@_); },
@@ -317,11 +346,13 @@ sub parse_cmdline
 
     parse_time_range ($attime) if ($attime);
 
-    parse_runtime ($runtime) if ($runtime);
+    parse_start_time ($starttime, $minstarttime, $maxstarttime);
+    parse_end_time ($endtime, $minendtime, $maxendtime);
+    parse_runtime ($runtime, $minruntime, $maxruntime);
 
     $conf{limit} = $conf{listlimit} if $conf{listlimit};
 
-    $conf{do_running} = 1 if $conf{nodb};
+    $conf{no_running} = 0 if $conf{nodb};
 
     check_format_list (@{$conf{userfmt}}) or exit 1 if (@{$conf{userfmt}});
 
@@ -484,47 +515,127 @@ sub set_nnodes
     }
 }
 
-sub set_time
+sub parse_datetime
 {
-    my ($name, $arg) = @_;
+    my ($arg) = @_;
+
+    return "" if (!$arg);
+
     my $date = parse_date ($arg)
         or log_fatal ("Invalid date string \"$arg\"\n");
 
-    $conf{$name} = UnixDate ($date, "%Y-%m-%d %H:%M:%S");
+    return UnixDate ($date, "%Y-%m-%d %H:%M:%S");
+}
 
-    log_verbose ("$name = $conf{$name}\n");
+sub parse_time_range
+{
+    my ($time) = @_;
+
+    my @t = split (/--/, $time);
+
+    log_fatal ("Invalid date and time or range: $time\n") if (@t > 2);
+
+    return map { parse_datetime ($_) } @t;
+}
+
+sub parse_time_window 
+{
+    $conf{qw/time1 time2/} = parse_time_range (@_);
+}
+
+sub parse_minmax_time
+{
+    my ($time) = @_;
+
+    if ($time =~ s/^\+(.*)$/$1/) {
+        return { "min" => parse_datetime ($time) };
+    }
+    elsif ($time =~ s/^-(.*)/$1/) {
+        return { "max" => parse_datetime ($time) };
+    }
+    else {
+        my ($t1, $t2) = parse_time_range ($time);
+        $t2 && return { "min" => $t1, "max" => "$t2" };
+        return { "equal" => $t1 };
+    }
+}
+
+sub parse_start_time
+{
+    my ($time, $min, $max) = @_;
+
+    log_fatal ("Do not specify --start with either --minstart or --maxstart.\n")
+       if ($time && ($min || $max));
+
+    $conf{starttime}{min} = parse_datetime ($min) if ($min);
+    $conf{starttime}{max} = parse_datetime ($max) if ($max); 
+    $conf{starttime} = parse_minmax_time ($time) if ($time);
+}
+
+sub parse_end_time
+{
+    my ($time, $min, $max) = @_;
+
+    log_fatal ("Do not specify --end with either --end-before or --end-after.\n")
+       if ($time && ($min || $max));
+
+    $conf{endtime}{min} = parse_datetime ($min) if ($min);
+    $conf{endtime}{max} = parse_datetime ($max) if ($max); 
+    $conf{endtime} = parse_minmax_time ($time);
 }
 
 sub parse_runtime
 {
-    my ($arg) = @_;
+    my ($time, $min, $max) = @_;
 
-    if ($arg =~ s/^\+([^-]+)$/$1/) {
-        $conf{mintime} = duration_to_seconds ($arg);
-        log_fatal ("Invalid min runtime specified: $arg\n") 
+    return if ($time < 0 && $min < 0 && $max < 0);
+
+    if ($time >= 0 && ($min >= 0 || $max >= 0)) {
+        log_fatal ("Do not specify --runtime with --mintime or --maxtime.\n");
+    }
+
+    $time = format_minmax_string ($time, $min, $max);
+
+    if ($time =~ /^\+(.*)$/) {
+        $conf{mintime} = duration_to_seconds ($1);
+        log_fatal ("Invalid min runtime specified: $1\n") 
             if !defined $conf{mintime};
     } 
-    elsif ($arg =~ s/^-<([^-]+)/$1/) {
-        $conf{maxtime} = duration_to_seconds ($arg);
-        log_fatal ("Invalid max runtime specified: $arg\n") 
+    elsif ($time =~ /^-(.*)/) {
+        $conf{maxtime} = duration_to_seconds ($1);
+        log_fatal ("Invalid max runtime specified: $1\n") 
             if !defined $conf{maxtime};
     }
-    elsif ($arg =~ /^([^-]+)-([^-]+)$/) {
+    elsif ($time =~ /^([^-]+)-([^-]+)$/) {
         $conf{mintime} = duration_to_seconds ($1);
         $conf{maxtime} = duration_to_seconds ($2);
         log_fatal ("Invalid max runtime specified: $1\n") 
-            if !defined $conf{maxtime};
-        log_fatal ("Invalid min runtime specified: $2\n") 
             if !defined $conf{mintime};
+        log_fatal ("Invalid min runtime specified: $2\n") 
+            if !defined $conf{maxtime};
     }
     else {
-        $conf{runtime} = duration_to_seconds ($arg);
-        log_fatal ("Invalid runtime specified: $arg\n") 
+        $conf{runtime} = duration_to_seconds ($time);
+        log_fatal ("Invalid runtime specified: $time\n") 
             if !defined $conf{runtime};
     }
 }
 
 #
+#  Turn optional arguments value, min, max, into a string
+#   describing the value, minimum, maximum, or range.
+#
+sub format_minmax_string 
+{
+    my ($val, $min, $max) = @_;
+    return ($val) if ($val >= 0);
+    return ("$min-$max") if ($min >= 0 && $max >= 0);
+    return ("-$max")     if ($max >= 0);
+    return ("+$min")     if ($min >= 0); 
+    return "";
+}
+
+
 #  Convert a duration to seconds. 
 #
 #  Valid duration strings include the common SLURM form D-HH:MM:SS
@@ -540,18 +651,6 @@ sub duration_to_seconds
     log_debug ("duration_to_seconds ($t): d=$d h=$h m=$m s=$s\n");
 
     return (($s||0) + ($m||0) * 60 + ($h||0) * 3600 + ($d||0) * 3600 * 24);
-}
-
-sub parse_time_range
-{
-    my ($time) = @_;
-
-    my @t = split (/--/, $time);
-
-    log_fatal ("Invalid date and time or range: $time\n") if (@t > 2);
-
-    set_time ("time1", $t[0]);
-    set_time ("time2", $t[1]) if $t[1];
 }
 
 sub append_excluded
@@ -667,6 +766,7 @@ $conf{datecache} = ();
 sub parse_date
 {
     my ($date) = @_;
+    return "" if (!defined $date);
     return $conf{datecache}{$date} if (exists $conf{datecache}{$date});
     return $conf{datecache}{$date} = ParseDate ($date);
 }
@@ -840,11 +940,24 @@ sub compose_query
                       "endtime >= "   . $dbh->quote ($conf{time1}));
     }
 
-    if ($conf{before}) { 
-        push (@stmts, "starttime <= " .  $dbh->quote ($conf{before})); 
+    if ($conf{endtime}{equal}) { 
+        push (@stmts, "endtime = " .  $dbh->quote ($conf{endtime}{equal})); 
     }
-    if ($conf{after})  { 
-        push (@stmts, "starttime >= " . $dbh->quote ($conf{after})); 
+    if ($conf{endtime}{max}) { 
+        push (@stmts, "endtime <= " .  $dbh->quote ($conf{endtime}{max})); 
+    }
+    if ($conf{endtime}{min})  { 
+        push (@stmts, "endtime >= " . $dbh->quote ($conf{endtime}{min})); 
+    }
+
+    if ($conf{starttime}{equal}) { 
+        push (@stmts, "starttime = " .  $dbh->quote ($conf{starttime}{equal})); 
+    }
+    if ($conf{starttime}{max}) { 
+        push (@stmts, "starttime <= " .  $dbh->quote ($conf{starttime}{max})); 
+    }
+    if ($conf{starttime}{min})  { 
+        push (@stmts, "starttime >= " . $dbh->quote ($conf{starttime}{min})); 
     }
 
     if ($conf{numnodes} >= 0) { 
@@ -912,6 +1025,55 @@ sub job_not_included
     return 0;
 }
 
+sub time_not_included
+{
+    my ($type, $time) = @_;
+
+    my $start = parse_date ($time);
+    my $equal = parse_date ($conf{$type}{equal});
+    my $min   = parse_date ($conf{$type}{min});
+    my $max   = parse_date ($conf{$type}{max});
+
+    log_debug ("Checking $type $start == $equal\n"); 
+    return 1 unless (!$equal || Date_Cmp ($start, $equal) == 0);
+    log_debug ("Checking $type $start <= $max\n"); 
+    return 1 unless (!$max   || Date_Cmp ($start, $max)   <= 0);
+    log_debug ("Checking $type $start >= $min\n"); 
+    return 1 unless (!$min   || Date_Cmp ($start, $min)   >= 0);
+    log_debug ("Checking $type $start not excluded\n"); 
+    return 0;
+}
+
+sub starttime_not_included
+{
+    my ($start) = @_;
+    return time_not_included ("starttime", $start);
+}
+
+sub endtime_not_included
+{
+    my ($end) = @_;
+    return time_not_included ("endtime", $end);
+}
+
+sub excluded_by_time_window
+{
+    my ($start, $end) = @_;
+    my $time1 = parse_date ($conf{time1});
+    my $time2 = parse_date ($conf{time2});
+    $start = parse_date ($start);
+    $end = parse_date ($end);
+
+    if ($time1 && $time2) {
+        return 1 if (Date_Cmp ($start, $time2) > 0);
+        return 1 if (Date_Cmp ($end,   $time1) < 0);
+    } elsif ($time1) {
+        return 1 unless (Date_Cmp ($start, $time1) <= 0);
+        return 1 unless (Date_Cmp ($end,   $time1) >= 0);
+    }
+    return 0;
+}
+
 sub query_running_jobs
 {
     my @names = qw/ jobid user uid name state partition limit start end 
@@ -923,8 +1085,6 @@ sub query_running_jobs
 
     my $time1  = parse_date ($conf{time1});
     my $time2  = parse_date ($conf{time2});
-    my $before = parse_date ($conf{before});
-    my $after  = parse_date ($conf{after});
 
     open (SQ, "$cmd |") or log_error ("Failed to run squeue: $!\n");
 
@@ -935,28 +1095,7 @@ sub query_running_jobs
 
         $r{runtime} = duration_to_seconds ($r{runtime});
 
-        if ($time1 && $time2) {
-            # all jobs which did not end before t1 and start after t2
-            my $start = parse_date ($r{start});
-            my $end = parse_date ($r{end});
-            next if (Date_Cmp ($start, $time2) > 0);
-            next if (Date_Cmp ($end,   $time1) < 0);
-        } elsif ($time1) {
-            my $start = parse_date ($r{start});
-            my $end = parse_date ($r{end});
-            next unless (Date_Cmp ($start, $time1) <= 0);
-            next unless (Date_Cmp ($end,   $time1) >= 0);
-        }
-
-        if ($conf{before}) {
-            my $start = parse_date ($r{start});
-            next unless (Date_Cmp ($start, $before) <= 0);
-        }
-
-        if ($conf{after}) {
-            my $start = parse_date ($r{start});
-            next unless (Date_Cmp ($start, $after) >= 0);
-        }
+        next if excluded_by_time_window ($r{start}, $r{end});
 
         next if (($conf{numnodes} >= 0) && !($r{nnodes} == $conf{numnodes}) );
         next if (($conf{minnodes} >= 0) && !($r{nnodes} >= $conf{minnodes}) );
@@ -966,8 +1105,9 @@ sub query_running_jobs
         next if (($conf{mintime} >= 0)  && !($r{runtime} >= $conf{mintime}) );
         next if (($conf{maxtime} >= 0)  && !($r{runtime} <= $conf{maxtime}) );
 
+        next if starttime_not_included ($r{start});
+        next if endtime_not_included ($r{end});
         next if nodes_not_included ($r{nodes});
-
         next if job_not_included (\%r);
 
         push (@{$conf{results}}, \%r);

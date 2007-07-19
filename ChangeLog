@@ -1,0 +1,14 @@
+2007-07-19 Mark Grondona <mgrondona@llnl.gov>
+
+	* sqlog : New options --start, --start-before, --start-after,
+	 --end, --end-before, --end-after. Removed --before and --after
+	 which are replaced by --start-before, --start-after.
+
+	* sqlog : Query running jobs by default and add -X, --no-running.
+
+	* sqlog : Add functions for parsing time ranges and min/max specifications.
+
+2007-07-18 Mark Grondona <mgrondona@llnl.gov>
+
+	* sqlog : Initial commit.
+
