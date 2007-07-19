@@ -1,0 +1,212 @@
+.\" $Id$
+.\"
+
+.TH SQLOG 1 "SLURM Query Log"
+
+.SH NAME
+sqlog \- SLURM query log utility
+
+.SH SYNOPSIS
+.B sqlog
+[\fIOPTIONS\fR]...
+
+.SH DESCRIPTION
+The \fBsqlog\fR utility provides a single interface to query information
+about jobs from the SLURM job log database and/or the current queue
+of running jobs. 
+
+By default both the current queue of running jobs and the database
+of completed jobs are queried, and a limit of 25 results is displayed.
+
+.SH OPTIONS
+.TP
+.BI "-h, --help"
+Display a summary of the command-line options.
+.TP
+.BI "-v, --verbose"
+Increase debugging verbosity of the program.
+.TP
+.BI "--dry-run"
+Don't actually do anything.
+.TP
+.BI "-j, --jobids " LIST
+Provide a comma-separated list of jobids to include (or exclude if
+preceded by the \fI-x\fR, \fI--exclude\fR option). This option may
+be specified multiple times.
+.TP
+.BI "-u, --users " LIST
+Provide a comma-separated list of users to include (or exclude if
+preceded by the \fI-x\fR, \fI--exclude\fR option). This option may
+be specified multiple times.
+.TP
+.BI "-p, --partitions " LIST
+Provide a comma-separated list of partitions to include (or exclude if
+preceded by the \fI-x\fR, \fI--exclude\fR option). This option may
+be specified multiple times.
+.TP
+.BI "-n, --nodes " LIST
+Provide a comma-separated list of nodes or node lists to include 
+(or exclude if preceded by the \fI-x\fR, \fI--exclude\fR option). This option may
+be specified multiple times. Node lists can be in hostlist format,
+e.g. host[34-36,67].
+.TP
+.BI "-J, --job-names " LIST
+Provide a comma-separated list of job names to include (or exclude if
+preceded by the \fI-x\fR, \fI--exclude\fR option). This option may
+be specified multiple times.
+.TP
+.BI "-s, --states " LIST
+Provide a comma-separated list of job states to include (or exclude if
+preceded by the \fI-x\fR, \fI--exclude\fR option). This option may
+be specified multiple times. Use --states=list to generate list of valid
+job state keys.
+.TP
+.BI "-x, --exclude"
+Exclude the following list of jobids, users, partitions, nodes, job names,
+or job states. For example: \fB--exclude --jobids\fR=\fILIST\fR or 
+\fB-xn\fR \fINODES\fR.
+.TP
+.BI "-N, --nnodes " N
+List jobs that ran on exactly \fIN\fR nodes. \fIN\fR may also have the 
+form +\fIN\fR, +\fIN\fR, or \fIN\fR-\fIM\fR, to specify a minimum, 
+maximum, or range of node counts.
+.TP
+.BI "--minnodes " N
+Explicity specify a minimum node count. This is equivalent to using
+the option \fB--nnodes\fR=+\fIN\fR.
+.TP
+.BI "--maxnodes " N
+Explicity specify a maximum node count. This is equivalent to using
+the option \fB--nnodes\fR=-\fIN\fR.
+.TP
+.BI "-t, --time, --at " TIME
+List jobs which were running at a particular date and time.
+\fITIME\fR arguments are parsed by the perl \fBDate::Manip\fR(3pm)
+package, so many date/time formats are allowed, i.e. 2pm or
+"4/14 15:30:00". A window of time may be specified by separating the
+start and end of the window with "--", e.g. \fB--time\fR=2pm--3pm.
+.TP
+.BI "-T, --runtime " DURATION
+List jobs that ran or have run for \fIDURATION\fR. \fIDURATION\fR may
+have the form DD-HH:MM:SS or DDdHHhMMmSSs, where DD is days, HH
+hours, MM minutes, and SS seconds. In the second form, values that
+are zero may be left out, e.g. 4h. In the first form, days, hours,
+and minutes are optional, e.g. :04 is 4 seconds. \fIDURATION\fR may
+be specified as +\fIT\fR, -\fIT\fR or \fIT1\fR-\fIT2\fR to specify
+a min, max, or runtime range.
+.TP
+.BI "--mintime " DURATION
+List all jobs that ran for at least \fIDURATION\fR.
+This is equivalent to specifying \fB--runtime\fR=+\fIDURATION\fR.
+.TP
+.BI "--maxtime " DURATION
+List all jobs that ran for at most \fIDURATION\fR.
+This is equivalent to specifying \fB--runtime\fR=-\fIDURATION\fR.
+.TP
+.BI "-S, --start " TIME
+List all jobs that started at date and time \fITIME\fR. \fITIME\fR may
+have the form +\fIT\fR, -\fIT\fR, or \fIT1\fR--\fIT2\fR to specify a
+minimum, maximum, or start time range. 
+.TP
+.BI "--start-after " TIME
+List all jobs that started after time \fITIME\fR. This is equivalent
+to using \fB--start\fR=+\fITIME\fR.
+.TP
+.BI "--start-before " TIME
+List all jobs that started before time \fITIME\fR. This is equivalent
+to using \fB--start\fR=-\fITIME\fR.
+.TP
+.BI "-E, --end " TIME
+List all jobs that ended at date and time \fITIME\fR. \fITIME\fR may
+have the form +\fIT\fR, -\fIT\fR, or \fIT1\fR--\fIT2\fR to specify a
+minimum, maximum, or end time range. For running jobs, SLURM uses
+an estimated end time, so end times in the future are valid and will
+be used. (and using \fB--end\fR=+now would list all currently 
+running jobs, since they all end in the future.)
+.TP
+.BI "--end-after " TIME
+List all jobs that ended (or will end) after time \fITIME\fR. This is 
+equivalent to using \fB--end\fR=+\fITIME\fR.
+.TP
+.BI "--end-before " TIME
+List all jobs that ended (or will end) before time \fITIME\fR. This is 
+equivalent to using \fB--end\fR=-\fITIME\fR.
+.TP
+.BI "-o, --format " LIST
+Specify a list of format keys to display or a format type, or both
+using the form \fITYPE\fR:\fIKEYS\fR... Use \fB--format\fR=list to
+list valid keys and types.
+.TP
+.BI "-P, --sort " LIST
+Specify a list of keys on which to sort output. Prepend a '-' to sort
+in descending as opposed to ascending order. List valid keys
+using \fB--sort\fR=list. The default sort method is '-start'. 
+.TP
+.BI "-X, --no-running" 
+Do not query running jobs, i.e. ignore the current queue and only
+query the SLURM job log database.
+.TP
+.BI "--no-db"
+Do not query the SLURM job log database, i.e. only query the current
+queue.
+.TP
+.BI "--limit " N
+Limit the number of records to report (Default = 25).
+.TP
+.BI "--all"
+Do not limit the number of returned results. (Return all matching rows).
+This is equivalent to \fB--limit\fR=0.
+.TP
+.BI "-H, --no-header"
+Do not display header rows in output.
+
+.SH EXAMPLES
+Display the job or jobs that were running on host55 at July 19, 4:00PM:
+.nf
+
+    sqlog --time="July 19, 4pm" --nodes=host55
+
+.fi
+Display at most 25 jobs that were running at midnight yesterday:
+.nf
+
+	sqlog --time=yesterday,midnight
+
+.fi
+Display all jobs that failed between 8:00AM and 9:00AM this morning,
+sorted by descending endtime:
+.nf
+
+    sqlog --all --end=8am--9am --states=F --sort=-end
+
+.fi 
+Display all jobs that started today:
+.nf
+
+    sqlog --start=+midnight --all
+
+.fi
+Display all jobs that have run between 3 and 4 hours on the nodes
+host30 through host65, and that didn't complete normally
+.nf
+
+   sqlog -L 0 -T=3h-4h -n 'host[30-65]' -xs completed
+
+.fi  
+Display all jobs that were running yesterday with 1000 nodes or 
+greater and completed normally:
+.nf
+
+    sqlog -t yesterday,12am--12am -s CD -N +1000
+
+.fi
+List current queue, sorted by number of nodes (ascending):
+.nf
+
+	sqlog --all --no-db --sort=nnodes
+
+.fi
+.SH AUTHOR
+Written by Adam Moody and Mark Grondona.
+
+

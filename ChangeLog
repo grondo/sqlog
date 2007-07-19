@@ -10,6 +10,8 @@
 
 	* sqlog : Fix time window parsing.
 
+	* sqlog.1 : Added man page.
+
 2007-07-18 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog : Initial commit.
