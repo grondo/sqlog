@@ -6,6 +6,9 @@
 	 to string equality tests of "eq" and "ne" since numeric operators of ">"
 	 would get confused for input such as -T +1h.
 
+	* sqlog : Changed 'N-M' to 'N--M' to be consistent with time window format.
+	 This way there is one consistent set of operators +/-/--.
+
 2007-07-19 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog : New options --start, --start-before, --start-after,

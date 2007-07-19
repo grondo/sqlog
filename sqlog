@@ -43,16 +43,19 @@ current queue of running jobs.
                               states, partitions, or nodes.
 
     -N, --nnodes=N           List all jobs that ran on N nodes. N may also
-                              have the form +N, -N, or N-M to specify a min, 
-                              max, or range for nnodes.
+                              have the form +N, -N, or N--M to specify a min, 
+                              max, or range for nnodes, e.g., '-N +8' to
+                              specify 8 or more nodes, '-N -32' to specify
+                              32 or less, and '-N 16--64' to specify between
+                              16 and 64 nodes inclusive.
         --minnodes=N         Explicitly specify the minimum number of nodes.
         --maxnodes=N         Explicitly specify the maximum number of nodes.
 
     -t, --time, --at=TIME    List jobs which were running at a particular date 
-                              and time. e.g '04/14 13:30:00' or 'today,2pm'.
+                              and time, e.g., '04/14 13:30:00' or 'today,2pm'.
                               A window of time may be specified by separating
                               the start and end time of the window with "--",
-                              e.g.: --time='7-17 1:00'--'7-17 08:00'
+                              e.g., --time='7-17 1:00'--'7-17 08:00'.
 
     -S, --start=TIME         List all jobs that started at TIME. TIME may have
                               the form +T, -T, or T1--T2 to specify min, max,
@@ -67,9 +70,9 @@ current queue of running jobs.
         --end-after=TIME     Explicitly specify minimum end time.
 
 
-    -T, --runtime=DURATION   List jobs that ran for DURATION. e.g. '4:30:00' or
+    -T, --runtime=DURATION   List jobs that ran for DURATION, e.g., '4:30:00' or
                               '4h30m'. DURATION may have the form +N, -N, or
-                              N-M to specify a min, max, or runtime range.
+                              N--M to specify a min, max, or runtime range.
         --mintime=DURATION   Explicitly specify the minimum runtime.
         --maxtime=DURATION   Explicitly specify the maximum runtime.
 
@@ -503,7 +506,7 @@ sub set_nnodes
     elsif ($nnodes =~ s/^-(\d+)/$1/) {
         $conf{maxnodes} = $nnodes;
     }
-    elsif ($nnodes =~ /^(\d+)-(\d+)$/) {
+    elsif ($nnodes =~ /^(\d+)--(\d+)$/) {
         $conf{minnodes} = $1;
         $conf{maxnodes} = $2;
     }
@@ -606,7 +609,7 @@ sub parse_runtime
         log_fatal ("Invalid max runtime specified: $1\n") 
             if !defined $conf{maxtime};
     }
-    elsif ($time =~ /^([^-]+)-([^-]+)$/) {
+    elsif ($time =~ /^([^-]+)--([^-]+)$/) {
         $conf{mintime} = duration_to_seconds ($1);
         $conf{maxtime} = duration_to_seconds ($2);
         log_fatal ("Invalid max runtime specified: $1\n") 
