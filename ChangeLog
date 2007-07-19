@@ -8,6 +8,8 @@
 
 	* sqlog : Add functions for parsing time ranges and min/max specifications.
 
+	* sqlog : Fix time window parsing.
+
 2007-07-18 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog : Initial commit.

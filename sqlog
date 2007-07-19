@@ -344,7 +344,7 @@ sub parse_cmdline
 
     usage () if $conf{help} || !$rc;
 
-    parse_time_range ($attime) if ($attime);
+    parse_time_window ($attime) if ($attime);
 
     parse_start_time ($starttime, $minstarttime, $maxstarttime);
     parse_end_time ($endtime, $minendtime, $maxendtime);
@@ -540,7 +540,7 @@ sub parse_time_range
 
 sub parse_time_window 
 {
-    $conf{qw/time1 time2/} = parse_time_range (@_);
+    @conf{qw/time1 time2/} = parse_time_range (@_);
 }
 
 sub parse_minmax_time
