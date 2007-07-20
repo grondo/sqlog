@@ -34,7 +34,7 @@ current queue of running jobs.
     -j, --jobids=LIST...     Comma-separated list of jobids.
     -u, --users=LIST...      Comma-separated list of users.
     -p, --partitions=LIST... Comma-separated list of partitions.
-    -n, --nodes=LIST...      Comma-separated list of nodes or node lists,
+    -n, --nodes=LIST...      Comma-separated list of nodes or node lists.
     -J, --job-names=LIST...  Comma-separated list of job names.
     -s, --states=LIST...     Comma-separated list of job states. 
                               Use '--states=list' to list valid state names.
@@ -42,37 +42,28 @@ current queue of running jobs.
     -x, --exclude            Exclude the following list of jobids, users, 
                               states, partitions, or nodes.
 
-    -N, --nnodes=N           List all jobs that ran on N nodes. N may also
-                              have the form +N, -N, or N--M to specify a min, 
-                              max, or range for nnodes, e.g., '-N +8' to
-                              specify 8 or more nodes, '-N -32' to specify
-                              32 or less, and '-N 16--64' to specify between
-                              16 and 64 nodes inclusive.
+    -N, --nnodes=N           List all jobs that ran on N nodes.
+                              RANGE operators apply.
         --minnodes=N         Explicitly specify the minimum number of nodes.
         --maxnodes=N         Explicitly specify the maximum number of nodes.
 
     -t, --time, --at=TIME    List jobs which were running at a particular date 
                               and time, e.g., '04/14 13:30:00' or 'today,2pm'.
-                              A window of time may be specified by separating
-                              the start and end time of the window with "--",
-                              e.g., --time='7-17 1:00'--'7-17 08:00'.
+                              RANGE operators apply.
 
-    -S, --start=TIME         List all jobs that started at TIME. TIME may have
-                              the form +T, -T, or T1--T2 to specify min, max,
-                              or start time range.
+    -S, --start=TIME         List all jobs that started at TIME.
+                              RANGE operators apply.
         --start-before=TIME  Explicitly specify maximum start time.
         --start-after=TIME   Explicitly specify minimum start time.
 
-    -E, --end=TIME           List all jobs that ended at TIME. TIME may have
-                              the form +T, -T, or T1--T2 to specify a min, max,
-                              or end time range.
+    -E, --end=TIME           List all jobs that ended at TIME.
+                              RANGE operators apply.
         --end-before=TIME    Explicitly specify maximum end time.
         --end-after=TIME     Explicitly specify minimum end time.
 
 
     -T, --runtime=DURATION   List jobs that ran for DURATION, e.g., '4:30:00' or
-                              '4h30m'. DURATION may have the form +N, -N, or
-                              N--M to specify a min, max, or runtime range.
+                              '4h30m'. RANGE operators apply.
         --mintime=DURATION   Explicitly specify the minimum runtime.
         --maxtime=DURATION   Explicitly specify the maximum runtime.
 
@@ -92,6 +83,20 @@ current queue of running jobs.
     -h, --help               Display this message.
     -v, --verbose            Increase output verbosity.
         --dry-run            Don't actually do anything.
+
+RANGE operators (@/+/-/--) may be applied to values of noted options.
+   \@N  ==>  exactly N (exactly at N), prepend to time points that start with '-'
+   +N  ==>  N or more (at N or later)
+   -N  ==>  N or less (at N or earlier)
+ N--M  ==>  between N and M, inclusive
+For some example uses,
+   -N +8     ==> jobs that ran with 8 or more nodes
+   -N 16--32 ==> jobs that ran with between 16 and 32 nodes, inclusive
+   -T -2h    ==> jobs that ran for 2 hours or less
+   -T 5m--1h ==> jobs that ran for between 5 minutes and 1 hour, inclusive
+   -t '7/17'--'7/18' ==> jobs that ran anytime from 12am,7/17 to 12am,7/18
+   -t +'1 hour ago'  ==> jobs that ran in the past hour (one hour ago or later)
+   -t \@-1hr  ==> jobs that were running exactly at one hour ago
 
 LIST refers to a comma-separated list of words. All options except --format
 which take a LIST argument may also be specified multiple times 
@@ -632,7 +637,7 @@ sub format_minmax_string
 {
     my ($val, $min, $max) = @_;
     return ($val) if ($val ne "");
-    return ("$min-$max") if ($min ne "" && $max ne "");
+    return ("$min--$max") if ($min ne "" && $max ne "");
     return ("-$max")     if ($max ne "");
     return ("+$min")     if ($min ne ""); 
     return "";
