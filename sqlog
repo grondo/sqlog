@@ -42,22 +42,20 @@ current queue of running jobs.
     -x, --exclude            Exclude the following list of jobids, users, 
                               states, partitions, or nodes.
 
-    -N, --nnodes=N           List all jobs that ran on N nodes.
-                              RANGE operators apply.
+    -N, --nnodes=N           List all jobs that ran on N nodes. N may be 
+                              specified using the RANGE syntax described below.
         --minnodes=N         Explicitly specify the minimum number of nodes.
         --maxnodes=N         Explicitly specify the maximum number of nodes.
 
     -t, --time, --at=TIME    List jobs which were running at a particular date 
                               and time, e.g., '04/14 13:30:00' or 'today,2pm'.
-                              RANGE operators apply.
+                              TIME may also be specified using RANGE operators.
 
     -S, --start=TIME         List all jobs that started at TIME.
-                              RANGE operators apply.
         --start-before=TIME  Explicitly specify maximum start time.
         --start-after=TIME   Explicitly specify minimum start time.
 
-    -E, --end=TIME           List all jobs that ended at TIME.
-                              RANGE operators apply.
+    -E, --end=TIME           List all jobs that ended at TIME. 
         --end-before=TIME    Explicitly specify maximum end time.
         --end-after=TIME     Explicitly specify minimum end time.
 
@@ -84,19 +82,21 @@ current queue of running jobs.
     -v, --verbose            Increase output verbosity.
         --dry-run            Don't actually do anything.
 
-RANGE operators (@/+/-/--) may be applied to values of noted options.
-   \@N  ==>  exactly N (exactly at N), prepend to time points that start with '-'
-   +N  ==>  N or more (at N or later)
-   -N  ==>  N or less (at N or earlier)
- N--M  ==>  between N and M, inclusive
-For some example uses,
-   -N +8     ==> jobs that ran with 8 or more nodes
-   -N 16--32 ==> jobs that ran with between 16 and 32 nodes, inclusive
-   -T -2h    ==> jobs that ran for 2 hours or less
-   -T 5m--1h ==> jobs that ran for between 5 minutes and 1 hour, inclusive
-   -t '7/17'--'7/18' ==> jobs that ran anytime from 12am,7/17 to 12am,7/18
-   -t +'1 hour ago'  ==> jobs that ran in the past hour (one hour ago or later)
-   -t \@-1hr  ==> jobs that were running exactly at one hour ago
+TIME, DURATION, and NUMERIC arguments may optionally use one of the RANGE 
+operators @, +, -, or '..', where 
+   +N      N or more (at N or later)
+   -N      N or less (at N or earlier)
+ N..M      Between N and M, inclusive
+ N or \@N   Exactly N (exactly at N) (use @ if 'N' begins with '+' or '-').
+
+RANGE Examples:
+   -N +8              jobs that ran with 8 or more nodes
+   -N 16..32          jobs that ran with between 16 and 32 nodes, inclusive
+   -T -2h             jobs that ran for 2 hours or less
+   -T 5m..1h          jobs that ran for between 5 minutes and 1 hour, inclusive
+   -t 7/17..7/18      jobs that ran anytime from 12am,7/17 to 12am,7/18
+   -t +'1 hour ago'   jobs that ran in the past hour (one hour ago or later)
+   -t \@-1hr         jobs that were running exactly at one hour ago
 
 LIST refers to a comma-separated list of words. All options except --format
 which take a LIST argument may also be specified multiple times 
@@ -293,8 +293,7 @@ sub parse_cmdline
     @{$conf{exclude}{nodes}}      = ();
     @{$conf{exclude}{job_names}}  = ();
 
-    $conf{time1}                  = 0;
-    $conf{time2}                  = 0;
+    $conf{attime}{@timevals}      = 0;
     $conf{starttime}{@timevals}   = 0;
     $conf{endtime}{@timevals}     = 0;
     $conf{numnodes}               = -1;
@@ -511,7 +510,7 @@ sub set_nnodes
     elsif ($nnodes =~ s/^-(\d+)/$1/) {
         $conf{maxnodes} = $nnodes;
     }
-    elsif ($nnodes =~ /^(\d+)--(\d+)$/) {
+    elsif ($nnodes =~ /^(\d+)\.\.(\d+)$/) {
         $conf{minnodes} = $1;
         $conf{maxnodes} = $2;
     }
@@ -529,6 +528,9 @@ sub parse_datetime
 
     return "" if (!$arg);
 
+    # Strip leading @
+    $arg =~ s/^@//;
+
     my $date = parse_date ($arg)
         or log_fatal ("Invalid date string \"$arg\"\n");
 
@@ -539,7 +541,7 @@ sub parse_time_range
 {
     my ($time) = @_;
 
-    my @t = split (/--/, $time);
+    my @t = split (/\.\./, $time);
 
     log_fatal ("Invalid date and time or range: $time\n") if (@t > 2);
 
@@ -548,7 +550,7 @@ sub parse_time_range
 
 sub parse_time_window 
 {
-    @conf{qw/time1 time2/} = parse_time_range (@_);
+    $conf{attime} = parse_minmax_time (@_);
 }
 
 sub parse_minmax_time
@@ -614,7 +616,7 @@ sub parse_runtime
         log_fatal ("Invalid max runtime specified: $1\n") 
             if !defined $conf{maxtime};
     }
-    elsif ($time =~ /^([^-]+)--([^-]+)$/) {
+    elsif ($time =~ /^([^-]+)\.\.([^-]+)$/) {
         $conf{mintime} = duration_to_seconds ($1);
         $conf{maxtime} = duration_to_seconds ($2);
         log_fatal ("Invalid max runtime specified: $1\n") 
@@ -623,6 +625,8 @@ sub parse_runtime
             if !defined $conf{maxtime};
     }
     else {
+        # strip any leading @
+        $time =~ s/^@//;
         $conf{runtime} = duration_to_seconds ($time);
         log_fatal ("Invalid runtime specified: $time\n") 
             if !defined $conf{runtime};
@@ -637,7 +641,7 @@ sub format_minmax_string
 {
     my ($val, $min, $max) = @_;
     return ($val) if ($val ne "");
-    return ("$min--$max") if ($min ne "" && $max ne "");
+    return ("$min\.\.$max") if ($min ne "" && $max ne "");
     return ("-$max")     if ($max ne "");
     return ("+$min")     if ($min ne ""); 
     return "";
@@ -653,6 +657,7 @@ sub duration_to_seconds
 {
     my ($t) = @_;
     my ($d, $h, $m, $s) = 
+       # XXX: This regex needs improvement (allows time to start with '-')
        ($t =~ /^(\d*?)[dD:-]?(\d*?)[hH:]?(\d*?)[mM:]?(\d*)[sS]?$/) 
        or return undef;
 
@@ -939,13 +944,21 @@ sub compose_query
     my @stmts = (stmt_list ($dbh, 0), stmt_list ($dbh, 1));
     my @have = ();
 
-    if ($conf{time1} and $conf{time2}) {
-        # all jobs which did not end before t1 and start after t2
-        push (@stmts, "(NOT (endtime < " . $dbh->quote($conf{time1}) . " OR " .
-                      "starttime > " . $dbh->quote($conf{time2}) . "))");
-    } elsif ($conf{time1}) {
-        push (@stmts, "starttime <= " . $dbh->quote ($conf{time1}) . " AND " .
-                      "endtime >= "   . $dbh->quote ($conf{time1}));
+    if ($conf{attime}{min} or $conf{attime}{max}) {
+        # all jobs which did not end before min and start after max
+        my $min = $conf{attime}{min};
+        my $max = $conf{attime}{max};
+        my $stmt = "(NOT (";
+        $stmt .= "endtime < "   . $dbh->quote($min) if ($min);
+        $stmt .= " OR " if ($min and $max); 
+        $stmt .= "starttime > " . $dbh->quote($max) if ($max);
+        $stmt .= "))";
+        push (@stmts, $stmt);
+    } 
+    elsif ($conf{attime}{equal}) {
+        push (@stmts, "starttime <= " . $dbh->quote ($conf{attime}{equal}) 
+                      . " AND " .
+                      "endtime >= "   . $dbh->quote ($conf{attime}{equal}));
     }
 
     if ($conf{endtime}{equal}) { 
@@ -1067,17 +1080,21 @@ sub endtime_not_included
 sub excluded_by_time_window
 {
     my ($start, $end) = @_;
-    my $time1 = parse_date ($conf{time1});
-    my $time2 = parse_date ($conf{time2});
+
+    my $min  = parse_date ($conf{attime}{min});
+    my $max  = parse_date ($conf{attime}{max});
+    my $time = parse_date ($conf{attime}{equal});
+
+    return 0 if (!$min && !$max && !$time);
+
     $start = parse_date ($start);
     $end = parse_date ($end);
 
-    if ($time1 && $time2) {
-        return 1 if (Date_Cmp ($start, $time2) > 0);
-        return 1 if (Date_Cmp ($end,   $time1) < 0);
-    } elsif ($time1) {
-        return 1 unless (Date_Cmp ($start, $time1) <= 0);
-        return 1 unless (Date_Cmp ($end,   $time1) >= 0);
+    return 1 if ($max && Date_Cmp ($start, $max) > 0);
+    return 1 if ($min && Date_Cmp ($end,   $min) < 0);
+    if ($time) {
+        return 1 unless (Date_Cmp ($start, $time) <= 0);
+        return 1 unless (Date_Cmp ($end,   $time) >= 0);
     }
     return 0;
 }
@@ -1090,9 +1107,6 @@ sub query_running_jobs
     my $sfmt = "%i::%u::%U::%j::%T::%P::%l::%S::%e::%N::%D::%M";
 
     my $cmd = "squeue -h -t running,completing -o $sfmt";
-
-    my $time1  = parse_date ($conf{time1});
-    my $time2  = parse_date ($conf{time2});
 
     open (SQ, "$cmd |") or log_error ("Failed to run squeue: $!\n");
 
