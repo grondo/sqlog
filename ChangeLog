@@ -5,6 +5,8 @@
 	* sqlog : Remove Examples from --help. They are now in the manpage.
 	  Read alternate config from /etc/slurm/sqlog.conf or ~/.sqlog.
 
+    * slurm-joblog.pl : Add slurm job completion script to repo.
+
 2007-07-25 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog : Changed range operator to ".."
