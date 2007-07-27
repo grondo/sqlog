@@ -111,7 +111,7 @@ EOF
 $conf{db}         = "slurm";
 $conf{sqluser}    = "slurm_read";
 $conf{sqlpass}    = "";
-$conf{sqlhost}    = "eatlas33";  
+$conf{sqlhost}    = "sqlhost";  
 
 #  Default max number of rows to fetch:
 $conf{limit}      = 25;
