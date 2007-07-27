@@ -1,6 +1,13 @@
+2007-07-19 Mark Grondona <mgrondona@llnl.gov>
+
+	* sqlog : Changed range operator to ".."
+	  --time may specify a min, max, or window of time.
+	  @ may be used to escape leading + or - in datetime values.
+
 2007-07-20 Adam Moody <moody20@llnl.gov>
 
-	* sqlog : Added RANGE operator description to usage, --time still needs support.
+	* sqlog : Added RANGE operator description to usage, 
+	  --time still needs support.
 
 2007-07-19 Adam Moody <moody20@llnl.gov>
 
