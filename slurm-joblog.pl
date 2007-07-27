@@ -1,6 +1,5 @@
 #!/usr/bin/perl -w
 ###############################################################################
-# $URL: svn+ssh://tyche.llnl.gov/var/svn/dist/admin/scripts/slurm-joblog.pl $
 # $Author: grondo $
 # $Date: 2007-07-13 12:53:05 -0700 (Fri, 13 Jul 2007) $
 # $Rev: 6233 $

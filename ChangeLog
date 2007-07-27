@@ -7,6 +7,8 @@
 
     * slurm-joblog.pl : Add slurm job completion script to repo.
 
+	* META, sqlog.spec : Add specfile and META for building RPMs.
+
 2007-07-25 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog : Changed range operator to ".."
