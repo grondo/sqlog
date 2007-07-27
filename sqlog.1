@@ -68,8 +68,9 @@ or job states. For example: \fB--exclude --jobids\fR=\fILIST\fR or
 .TP
 .BI "-N, --nnodes " N
 List jobs that ran on exactly \fIN\fR nodes. \fIN\fR may also have the 
-form +\fIN\fR, +\fIN\fR, or \fIN\fR-\fIM\fR, to specify a minimum, 
-maximum, or range of node counts.
+form +\fIN\fR, +\fIN\fR, or \fIN\fR..\fIM\fR, to specify a minimum, 
+maximum, or range of node counts. For examples see RANGE OPERATORS
+section below.
 .TP
 .BI "--minnodes " N
 Explicity specify a minimum node count. This is equivalent to using
@@ -84,7 +85,8 @@ List jobs which were running at a particular date and time.
 \fITIME\fR arguments are parsed by the perl \fBDate::Manip\fR(3pm)
 package, so many date/time formats are allowed, i.e. 2pm or
 "4/14 15:30:00". A window of time may be specified by separating the
-start and end of the window with "--", e.g. \fB--time\fR=2pm--3pm.
+start and end of the window with "..", e.g. \fB--time\fR=2pm..3pm.
+For more information see the RANGE OPERATORS section below.
 .TP
 .BI "-T, --runtime " DURATION
 List jobs that ran or have run for \fIDURATION\fR. \fIDURATION\fR may
@@ -92,8 +94,9 @@ have the form DD-HH:MM:SS or DDdHHhMMmSSs, where DD is days, HH
 hours, MM minutes, and SS seconds. In the second form, values that
 are zero may be left out, e.g. 4h. In the first form, days, hours,
 and minutes are optional, e.g. :04 is 4 seconds. \fIDURATION\fR may
-be specified as +\fIT\fR, -\fIT\fR or \fIT1\fR-\fIT2\fR to specify
-a min, max, or runtime range.
+be specified as +\fIT\fR, -\fIT\fR or \fIT1\fR..\fIT2\fR to specify
+a min, max, or runtime range. For more information, see the RANGE
+OPERATORS section below.
 .TP
 .BI "--mintime " DURATION
 List all jobs that ran for at least \fIDURATION\fR.
@@ -105,8 +108,9 @@ This is equivalent to specifying \fB--runtime\fR=-\fIDURATION\fR.
 .TP
 .BI "-S, --start " TIME
 List all jobs that started at date and time \fITIME\fR. \fITIME\fR may
-have the form +\fIT\fR, -\fIT\fR, or \fIT1\fR--\fIT2\fR to specify a
-minimum, maximum, or start time range. 
+have the form +\fIT\fR, -\fIT\fR, or \fIT1\fR..\fIT2\fR to specify a
+minimum, maximum, or start time range. See RANGE OPERATORS below
+for more information.
 .TP
 .BI "--start-after " TIME
 List all jobs that started after time \fITIME\fR. This is equivalent
@@ -118,8 +122,9 @@ to using \fB--start\fR=-\fITIME\fR.
 .TP
 .BI "-E, --end " TIME
 List all jobs that ended at date and time \fITIME\fR. \fITIME\fR may
-have the form +\fIT\fR, -\fIT\fR, or \fIT1\fR--\fIT2\fR to specify a
-minimum, maximum, or end time range. For running jobs, SLURM uses
+have the form +\fIT\fR, -\fIT\fR, or \fIT1\fR..\fIT2\fR to specify a
+minimum, maximum, or end time range (see RANGE OPERATORS below for
+more information). For running jobs, SLURM uses
 an estimated end time, so end times in the future are valid and will
 be used. (and using \fB--end\fR=+now would list all currently 
 running jobs, since they all end in the future.)
@@ -159,6 +164,48 @@ This is equivalent to \fB--limit\fR=0.
 .TP
 .BI "-H, --no-header"
 Do not display header rows in output.
+
+.SH RANGE OPERATORS
+\fITIME\fR, \fIDURATION\fR, and numeric arguments may use the RANGE OPERATORS
+ '+', '-', and '..' to specify minimum, maximum, or a range of values 
+respectively.  TIME arguments may also use the '@' symbol to escape a 
+leading + or - in the TIME itself (e.g. '-1hr' means '1 hr ago').
+The \fB--time\fB, \fB--start\fR, \fB--end\fR, \fB--runtime\fB, and
+\fB--nnodes\fR options to \fBsqlog\fR all take RANGE OPERATORS.
+.TP
+Examples 
+.TP 20
+.BI "--nnodes " +8
+Jobs that ran with 8 or more nodes.
+.TP
+.BI "--nnodes " 16..32
+Jobs that ran with between 16 and 32 nodes, inclusive.
+.TP
+.BI "--runtime " -2h
+Jobs that ran for 2 hours or less.
+.TP
+.BI "--runtime " 5m..1hr
+Jobs that ran for between 5 minutes and 1 hour, inclusive.
+.TP
+.BI "--end " 2pm..3pm
+Jobs that ended today between 2PM and 3PM, inclusive.
+.TP
+.BI "--time " 7/17..7/18
+Jobs that ran anytime from 12AM, 7/17 to 12AM, 7/18.
+.TP
+.BI "--time " "+'1 hour ago'"
+Jobs that ran in the past hour (1 hour ago or later).
+.TP
+.BI "--time " "+-1hr (or +@-1hr)"
+Same as above.
+.TP
+.BI "--time " @-1hr
+Jobs that were running exactly at one hour ago.
+.TP
+.BI "--time " @-2hr..-1hr
+Jobs that were running between 2 hours ago and 1 hour ago.
+
+
 
 .SH EXAMPLES
 Display the job or jobs that were running on host55 at July 19, 4:00PM:

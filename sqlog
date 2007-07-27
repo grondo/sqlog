@@ -14,8 +14,6 @@ use DBI;
 use File::Basename;
 use Getopt::Long qw/ :config gnu_getopt ignore_case /;
 use Hostlist qw/ expand compress intersect /;
-use Genders;
-use Gendersllnl;
 use Date::Manip;
 
 my $progname = basename $0;
@@ -83,20 +81,11 @@ current queue of running jobs.
         --dry-run            Don't actually do anything.
 
 TIME, DURATION, and NUMERIC arguments may optionally use one of the RANGE 
-operators @, +, -, or '..', where 
+operators +, -, or '..', where 
    +N      N or more (at N or later)
    -N      N or less (at N or earlier)
  N..M      Between N and M, inclusive
  N or \@N   Exactly N (exactly at N) (use @ if 'N' begins with '+' or '-').
-
-RANGE Examples:
-   -N +8              jobs that ran with 8 or more nodes
-   -N 16..32          jobs that ran with between 16 and 32 nodes, inclusive
-   -T -2h             jobs that ran for 2 hours or less
-   -T 5m..1h          jobs that ran for between 5 minutes and 1 hour, inclusive
-   -t 7/17..7/18      jobs that ran anytime from 12am,7/17 to 12am,7/18
-   -t +'1 hour ago'   jobs that ran in the past hour (one hour ago or later)
-   -t \@-1hr         jobs that were running exactly at one hour ago
 
 LIST refers to a comma-separated list of words. All options except --format
 which take a LIST argument may also be specified multiple times 
@@ -116,11 +105,13 @@ EOF
 # Configuration:
 #
 
-# DB constants 
+# 
+# DB configuration defaults 
+#
 $conf{db}         = "slurm";
 $conf{sqluser}    = "slurm_read";
 $conf{sqlpass}    = "";
-$conf{sqlhost}    = get_sqlhost ();
+$conf{sqlhost}    = "eatlas33";  
 
 #  Default max number of rows to fetch:
 $conf{limit}      = 25;
@@ -219,6 +210,13 @@ for my $st (keys %{$conf{state_names}}) {
 #  Initialize Date::Manip:
 Date_Init ();
 
+#  Initialize local conf object.
+conf_init ();
+
+#  Read configuration file(s)
+read_config ();
+
+#  Parse command line options.
 parse_cmdline ();
 
 #  Initialize DBI:
@@ -261,41 +259,22 @@ exit 0;
 #
 #  Functions:
 #
-sub parse_cmdline 
-{
-    my @sortkeys                  = ();
-    my $starttime                 = "";
-    my $maxstarttime              = "";
-    my $minstarttime              = "";
-    my $endtime                   = "";
-    my $minendtime                = "";
-    my $maxendtime                = "";
-    my $runtime                   = "";
-    my $minruntime                = "";
-    my $maxruntime                = ""; 
-    my $attime                    = "";
 
-    my @timevals                  = qw/ min t0 max /;
+sub conf_init 
+{
 
     $conf{got_exclude}            = 0;
-
     @{$conf{userfmt}}             = ();
-    @{$conf{jobids}}              = ();
-    @{$conf{users}}               = ();
-    @{$conf{states}}              = ();
-    @{$conf{partitions}}          = ();
-    @{$conf{nodes}}               = ();
-    @{$conf{job_names}}           = ();
-    @{$conf{exclude}{jobids}}     = ();
-    @{$conf{exclude}{users}}      = ();
-    @{$conf{exclude}{states}}     = ();
-    @{$conf{exclude}{partitions}} = ();
-    @{$conf{exclude}{nodes}}      = ();
-    @{$conf{exclude}{job_names}}  = ();
 
-    $conf{attime}{@timevals}      = 0;
-    $conf{starttime}{@timevals}   = 0;
-    $conf{endtime}{@timevals}     = 0;
+    for (qw/jobids users starts partitions nodes job_names/) {
+        @{$conf{$_}} = ();
+        @{$conf{exclude}{$_}} = ();
+    }
+
+    for (qw/attime starttime endtime/) {
+        $conf{$_}{qw/min t0 max/} = (0, 0, 0);
+    }
+
     $conf{numnodes}               = -1;
     $conf{minnodes}               = -1;
     $conf{maxnodes}               = -1;
@@ -309,6 +288,35 @@ sub parse_cmdline
     $conf{nodb}                   = 0;
     $conf{verbose}                = 0;
     $conf{help}                   = 0;
+}
+
+sub read_config
+{
+    for my $f ("/etc/sqlog.conf", "$ENV{HOME}/.sqlog") {
+        unless (my $rc = do $f) {
+            log_fatal ("Couldn't parse $f: $@\n") if $@;
+            next unless defined $rc;
+            log_fatal ("couldn't run $f\n") unless $rc;
+        }
+        $conf{sqlhost} = $conf::SQLHOST if (defined $conf::SQLHOST);
+        $conf{sqluser} = $conf::SQLUSER if (defined $conf::SQLUSER);
+        $conf{db}      = $conf::SQLDB   if (defined $conf::SQLDB);
+    }
+}
+
+sub parse_cmdline 
+{
+    my @sortkeys                  = ();
+    my $starttime                 = "";
+    my $maxstarttime              = "";
+    my $minstarttime              = "";
+    my $endtime                   = "";
+    my $minendtime                = "";
+    my $maxendtime                = "";
+    my $runtime                   = "";
+    my $minruntime                = "";
+    my $maxruntime                = ""; 
+    my $attime                    = "";
 
     my $rc = GetOptions (
         "help|h"         => \$conf{help},
@@ -868,24 +876,6 @@ sub run_query
     }
 
     log_verbose ("Fetched $count rows.\n");
-}
-
-#
-#  Get cluster's "sqlhost" (altmgmt node for now)
-#   (Returns the ethernet hostname for the node, if available)
-#
-sub get_sqlhost
-{
-    my $genders = Genders->new();
-    my $host = "";
-    
-    ($host) = $genders->getnodes("altmgmt") or 
-      ($host) = $genders->getnodes("mgmt") or
-      log_fatal ("Failed to get SQL host from (alt)mgmt genders attribute.\n");
-
-    my $server = $genders->getattrval("altname", $host);
-
-    return $server;
 }
 
 sub dbh_init

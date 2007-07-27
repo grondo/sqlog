@@ -1,4 +1,11 @@
-2007-07-19 Mark Grondona <mgrondona@llnl.gov>
+2007-07-27 Mark Grondona <mgrondona@llnl.gov>
+
+	* sqlog.1 : Update man page with new RANGE OPERATORS section.
+
+	* sqlog : Remove Examples from --help. They are now in the manpage.
+	  Read alternate config from /etc/slurm/sqlog.conf or ~/.sqlog.
+
+2007-07-25 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog : Changed range operator to ".."
 	  --time may specify a min, max, or window of time.
