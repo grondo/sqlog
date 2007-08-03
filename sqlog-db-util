@@ -198,7 +198,7 @@ sub read_config
     @{$conf{rw}{hosts}} = @conf::SQLRWHOSTS if (defined @conf::SQLRWHOSTS);
 
     my %seen;
-    @{$conf{rw}{hosts}} = grep {!$seen{$_}++} @{$conf{rw}{hosts}};
+    @{$conf{rw}{hosts}} = grep {$_ && !$seen{$_}++} @{$conf{rw}{hosts}};
 
 }
 
