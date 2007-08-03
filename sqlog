@@ -884,7 +884,8 @@ sub dbh_init
                             $conf{sqluser}, $conf{sqlpass})
         or log_fatal("Failed to connect to DB at $conf{sqlhost}\n");
 
-    log_verbose ("Connected to database $conf{db} at host $conf{sqlhost}\n");
+    log_verbose ("Connected to database $conf{db} at host $conf{sqlhost} " .
+                 "as user $conf{sqluser}\n");
 
     return $dbh;
 }
