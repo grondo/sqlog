@@ -1,0 +1,430 @@
+#!/usr/bin/perl -w
+#
+# $Id$
+#
+use strict;
+use DBI;
+use Digest::SHA1 qw/ sha1_hex /;
+use Getopt::Long qw/ :config gnu_getopt ignore_case /;
+use File::Basename;
+
+# This file contains the SQL statements needed
+# to set up a 'slurm_job_log' table in a 'slurm' DB
+# on a MySQL server.
+#
+# It can also be used to backfill the database by
+# inserting records from a list of slurm job completion
+# logfiles.
+#
+# Adam Moody <moody20@llnl.gov>
+
+my %conf = ();
+
+##############################
+#  Usage:
+#############################
+my $progname = basename $0;
+
+$conf{usage} = <<EOF
+Usage: $progname [OPTIONS]... [FILES]...
+
+Create SLURM job completion log database along with user accounts to
+access it, and/or backfill the database from SLURM job completion
+logfiles.
+
+    -b, --backfill  Backfill database from SLURM joblog files in ARGV.
+    -c, --create    Create slurm database, slurm & slurm_read users, and table.
+    -d, --drop      Drop existing table.
+    -L, --localhost Connect to DB over localhost instead of configured SQL host.
+
+    -h, --help      Display this message.
+    -v, --verbose   Be verbose.
+
+EOF
+;
+
+sub usage { print STDERR $conf{usage}; exit 0; }
+
+##############################
+#  Parse Command-line
+#############################
+# set defaults and read in command-line options
+$conf{backfill} = "";
+$conf{create}   = 0;
+$conf{drop}     = 0;
+$conf{localhost}= 0;
+
+GetOptions (
+   "help|h"         => \$conf{help},
+   "backfill|b"     => \$conf{backfill},
+   "create|c"       => \$conf{create},
+   "drop|d"         => \$conf{drop},
+   "localhost|L"    => \$conf{localhost},
+   "verbose|v+"     => \$conf{verbose},
+) or usage ();
+
+if (!$conf{create} && !$conf{drop} && !$conf{backfill}) {
+    log_error ("Specify at least one of --create, --drop, or --backfill\n");
+    usage ();
+}
+
+if ($conf{help}) {
+    usage ();
+}
+
+#############################
+#  Read Config File.
+#############################
+
+# Config Defaults
+$conf{db}          = "slurm";
+$conf{sqlhost}     = "sqlhost";
+$conf{ro}{sqluser} = "slurm_read";
+$conf{ro}{sqlpass} = "";
+
+$conf{rw}{sqluser} = "slurm";
+$conf{rw}{sqlpass} = "";
+
+read_config ();
+
+$conf{sqlhost} = "localhost" if ($conf{localhost});
+
+#############################
+# Attempt to connect to slurm database
+#############################
+
+# test whether slurm db already exists by trying to connect
+my $dbh = connect_db_rw ();
+
+# optionally drop existing database
+if ($conf{drop}) {
+    if ($dbh) {
+        log_verbose ("drop: Dropping existing slurm_job_log table\n");
+        drop_slurm_joblog_table ();
+        $dbh = disconnect_db_rw ();
+    }
+    else {
+        log_verbose ("drop: No existing slurm DB to drop\n");
+    }
+}
+
+if ($conf{create} && $dbh) {
+    log_verbose ("create: SLURM database already exists.\n");
+}
+elsif ($conf{create} && !$dbh) {
+    # the db may not exist (couldn't connect), try to create it
+    create_db ();
+    # try to connect again
+    $dbh = connect_db_rw() 
+        or log_fatal ("Failed to connect to SLURM DB after create!\n");
+}
+
+# optionally backfill from logfiles
+if ($conf{backfill}) { 
+    if (!$dbh) {
+        log_fatal ("Backfill requested, but connection to database failed!\n")
+    }
+    backfill_from_files($dbh, @ARGV); 
+}
+
+disconnect_db_rw ();
+
+exit 0;
+
+#############################
+# Support functions
+#############################
+
+sub connect_db_rw
+{
+    my $dbh = DBI->connect("DBI:mysql:database=$conf{db};host=$conf{sqlhost}:", 
+            $conf{rw}{sqluser}, $conf{rw}{sqlpass});
+    $conf{dbh}{rw} = $dbh;
+    return ($dbh);
+}
+
+sub disconnect_db_rw
+{
+    return if !$conf{dbh}{rw};
+    $conf{dbh}{rw}->disconnect;
+    return $conf{dbh}{rw} = undef;
+}
+
+sub connect_db_root
+{
+    my $str  = "DBI:mysql(PrintError=>0):;";
+    my $host = $conf{use_localhost} ? "localhost" : $conf{sqlhost};
+
+    $str .= "host=$host";
+
+    $conf{dbh}{root} = DBI->connect ($str, "root", $conf{rw}{rootpass}) 
+        or log_fatal ("Unable to connect to MySQL DB as root\@$host: ",
+                      $DBI::errstr, "\n");
+
+    return ($conf{dbh}{root});
+}
+
+sub read_config 
+{
+    my $ro = "/etc/slurm/sqlog.conf";
+    my $rw = "/etc/slurm/slurm-joblog.conf";
+
+    # First read sqlog config to get SQLHOST and SQLDB
+    #  (ignore SQLUSER/SQLPASS)
+    unless (my $rc = do $ro) {
+        log_fatal ("Couldn't parse $ro: $@\n") if $@;
+        log_fatal ("couldn't run $ro\n") if (defined $rc && !$rc);
+    }
+
+    $conf{db}          = $conf::SQLDB   if (defined $conf::SQLDB);
+    $conf{sqlhost}     = $conf::SQLHOST if (defined $conf::SQLHOST);
+    $conf{ro}{sqluser} = $conf::SQLUSER if (defined $conf::SQLUSER);
+    $conf{ro}{sqlpass} = $conf::SQLPASS if (defined $conf::SQLPASS);
+
+    undef $conf::SQLUSER;
+    undef $conf::SQLPASS;
+
+    # Now read slurm-joblog.conf
+    -r $rw  || log_fatal ("Unable to read required config file: $rw.\n");
+    unless (my $rc = do $rw) {
+        log_fatal ("Couldn't parse $rw: $@\n") if $@;
+        log_fatal ("couldn't run $rw\n") if (defined $rc && !$rc);
+    }
+
+    $conf{rw}{sqluser}    = $conf::SQLUSER     if (defined $conf::SQLUSER);
+    $conf{rw}{sqlpass}    = $conf::SQLPASS     if (defined $conf::SQLPASS);
+    $conf{rw}{rootpass}   = $conf::SQLROOTPASS if (defined $conf::SQLROOTPASS);
+
+    @{$conf{rw}{hosts}} = @conf::SQLRWHOSTS if (defined @conf::SQLRWHOSTS);
+
+    my %seen;
+    @{$conf{rw}{hosts}} = grep {!$seen{$_}++} @{$conf{rw}{hosts}};
+
+}
+
+# Connect to MySQL as root user to build slurm db and insert slurm and slurm_read users
+sub create_db 
+{
+    my $dbh = connect_db_root () 
+        or log_fatal ("Couldn't connect to database as root\n");
+
+    #############################
+    # Create slurm db / table
+    #############################
+
+    log_verbose ("Creating slurm DB\n");
+    do_sql ($dbh, "CREATE DATABASE $conf{db};"); # Create the slurm database
+    do_sql ($dbh, "USE $conf{db};");             # Switch to use the db
+
+    log_verbose ("Dropping existing slurm_job_log table\n");
+    drop_slurm_joblog_table ($dbh);              
+
+    log_verbose ("Creating new slurm_job_log table\n");
+    create_slurm_joblog_table ($dbh);            
+
+    #############################
+    # Set up slurm (r/w) and slurm_read (r/o) access 
+    #############################
+
+    # Switch to management databases
+    do_sql($dbh, "USE mysql;");
+
+    # set up permissions for different users of slurm database
+    for my $host (@{$conf{rw}{hosts}}, "localhost") {
+        log_verbose ("Granting rw privileges to $conf{rw}{sqluser} on $host\n");
+        do_sql ($dbh, 
+                "GRANT ALL ON $conf{db}.* TO" .
+                " '$conf{rw}{sqluser}'\@'$host'" .
+                " IDENTIFIED BY '$conf{rw}{sqlpass}'"); 
+    }
+    log_verbose ("Granting readonly privs to $conf{ro}{sqluser} on 192.168.\n");
+    do_sql ($dbh, 
+            "GRANT SELECT ON $conf{db}.* TO"   .
+            " $conf{ro}{sqluser}\@'192.168.%.%'" .
+            " IDENTIFIED BY ''");
+
+    # flush privileges to make our changes current
+    log_verbose ("FLUSH PRIVILEGES\n");
+    do_sql($dbh, "FLUSH PRIVILEGES;");
+
+    # we're done
+    log_verbose ("Done creating slurm joblog DB.\n");
+}
+
+# given a dbh and list of slurm job completion logfiles, insert them into the dbh
+sub backfill_from_files 
+{
+    my $dbh = shift @_;
+    my @files = @_;
+
+    log_error ("No files to backfill!\n") if (!@files);
+
+    foreach my $file (@files) {
+        my @values = ();
+        my $count = 0;
+        my $skipped = 0;
+
+        my $f = $file;
+        $f = "gzip -dc $f | " if ($f =~ /\.gz$/);
+
+        open (IN, $f) or log_error ("Failed to open \"$file\":$!\n"), next;
+
+        while (my $line = <IN>) {
+            chomp $line;
+            my @parts = split(" ", $line);
+
+            my %hash = ();
+            foreach my $part (@parts) {
+                my ($key, $value) = split("=", $part);
+                $hash{$key} = $value;
+            }
+
+            # Some very old joblog files may have the incorrect
+            #  datetime format. Unfortunately, the year wasn't 
+            #  included in these, so we have to drop these entries :-(
+            if ($hash{StartTime} =~ m{^\d\d/\d\d-}) {
+                $skipped++;
+                next;
+            }
+
+            # convert from slurm log to format for MySQL
+            my $userid = $hash{"UserId"};
+            my ($username, $usernumb) = ($userid =~ /(.+)\((\d+)\)/);
+            $hash{"UserName"} = $username;
+            $hash{"UserNumb"} = $usernumb;
+            $hash{"StartTime"} =~ s/T/ /;
+            $hash{"EndTime"} =~ s/T/ /;
+
+            push @values, value_string(\%hash);
+            
+            if (@values > 100) {
+                insert_values($dbh, @values);
+                @values = ();
+            }
+            $count++;
+        }
+        insert_values($dbh, @values);
+
+        log_verbose ("Backfilled $count jobs from file $file\n");
+        log_error ("Skipped $skipped job(s) from file $file because of ",
+                  "old date format\n") if $skipped;
+
+        close(IN);
+    }
+}
+
+# execute (do) sql statement on dbh
+sub do_sql {
+    my ($dbh, $stmt) = @_;
+    log_debug ("SQL: $stmt\n");
+    log_error ("SQL: $stmt failed.\n") unless $dbh->do ($stmt);
+}
+
+sub drop_slurm_joblog_table 
+{
+    my $dbh = shift @_ || connect_db_root ();
+    do_sql ($dbh, "USE $conf{db};"); 
+    do_sql ($dbh, "DROP TABLE slurm_job_log;");
+}
+
+# drop and rebuild the table
+sub create_slurm_joblog_table {
+    my $dbh = shift @_ || connect_db_root ();
+
+    do_sql ($dbh, "USE $conf{db};"); 
+
+    my $sql = "CREATE TABLE slurm_job_log (
+        id        int(10)   NOT NULL AUTO_INCREMENT,
+        jobid     int(10)   NOT NULL,
+        username  char(100) NOT NULL,
+        userid    int(10)   NOT NULL,
+        jobname   char(100) NOT NULL,
+        jobstate  char(25)  NOT NULL,
+        partition char(25)  NOT NULL,
+        timelimit int(10)   NOT NULL,
+        starttime datetime  NOT NULL,
+        endtime   datetime  NOT NULL,
+        nodelist  varchar(1024) NOT NULL,
+        nodecount int(10)   NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE INDEX jobid (jobid,starttime),
+        INDEX username (username)
+       ) TYPE=MyISAM;";
+    do_sql ($dbh, $sql);
+}
+
+# given hash of values, create mysql values string for insert statement
+sub value_string {
+  my $h = shift @_;
+  my @parts = ();
+
+  push @parts, "NULL";
+  push @parts, $dbh->quote($h->{JobId});
+  push @parts, $dbh->quote($h->{UserName});
+  push @parts, $dbh->quote($h->{UserNumb});
+  push @parts, $dbh->quote($h->{Name});
+  push @parts, $dbh->quote($h->{JobState});
+  push @parts, $dbh->quote($h->{Partition});
+  push @parts, $dbh->quote($h->{TimeLimit});
+  push @parts, $dbh->quote($h->{StartTime});
+  push @parts, $dbh->quote($h->{EndTime});
+  push @parts, $dbh->quote($h->{NodeList});
+  push @parts, $dbh->quote($h->{NodeCnt});
+
+  return "(" . join(',', @parts) . ")";
+}
+
+# do a batch insert to be more efficient
+sub insert_values 
+{
+    my $dbh = shift @_;
+    my @values = @_;
+
+    while (@values) {
+        my @subvalues = ();
+        for (my $i = 0; $i < 50 and @values; $i++) { 
+            push @subvalues, shift @values; 
+        }
+        my $sql = "INSERT IGNORE INTO slurm_job_log VALUES " . 
+            join(",", @subvalues) . ";";
+
+        #log_debug ("SQL: $sql\n");
+        $dbh->do($sql);
+    }
+}
+
+#
+#  Generate a digest of the password, sha1 or md5 depending on the
+#   size of the password column in the user table
+#
+sub passwd_digest
+{
+    my $dbh = connect_db_root ();
+    my $passwd = shift @_;
+
+    log_fatal ("passwd_digest: Failed to get DB handle!\n") if !$dbh;
+
+    my $sth = $dbh->prepare ("SELECT PASSWORD('example');") 
+        or log_fatal ($dbh->errstr);
+
+    $sth->execute ();
+
+    my ($r) = $sth->fetchrow_array ();
+
+    if (length $r >= 41) {
+        return "*" . sha1_hex ($passwd);
+    } 
+
+    #  I don't know what the short password hash is, so 
+    #   use of this function is disabled for now.
+    #
+    #return (unpack ("H16", pack ("A13", $c)));
+}
+
+sub log_msg     { print STDERR "$progname: ", @_;       }
+sub log_error   { log_msg ("Error: ", @_);              }
+sub log_fatal   { log_msg ("Fatal: ", @_); exit 1;      }
+sub log_verbose { log_msg (@_) if ($conf{verbose});     }
+sub log_debug   { log_msg (@_) if ($conf{verbose} > 1); }
+
+# vi: ts=4 sw=4 expandtab
