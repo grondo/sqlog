@@ -13,9 +13,8 @@ Requires: slurm
 %define debug_package %{nil}
 
 %description
-numa-maps is a simple script which parses /proc/PID/numa_maps
-and /proc/PID/maps to display NUMA information for running
-processes.
+sqlog provides a system for creation, query, and population of a 
+database for logging SLURM jobs as they complete.
 
 
 %prep 
@@ -29,6 +28,7 @@ rm -rf "$RPM_BUILD_ROOT"
 mkdir -p "$RPM_BUILD_ROOT"
 install -D -m 755 sqlog  ${RPM_BUILD_ROOT}/%{_bindir}/sqlog
 install -D -m 644 sqlog.1 ${RPM_BUILD_ROOT}/%{_mandir}/man1/sqlog.1
+install -D -m 755 sqlog-db-util ${RPM_BUILD_ROOT}/%{_sbindir}/sqlog-db-util
 install -D -m 755 slurm-joblog.pl \
 			${RPM_BUILD_ROOT}/%{_libexecdir}/sqlog/slurm-joblog
 
@@ -37,7 +37,8 @@ rm -rf "$RPM_BUILD_ROOT"
 
 %files
 %defattr(-,root,root)
-%doc ChangeLog
+%doc ChangeLog sqlog.conf.example slurm-joblog.conf.example
 %{_bindir}/sqlog
+%{_sbindir}/sqlog-db-util
 %{_mandir}/*/*
 %{_libexecdir}/sqlog/slurm-joblog

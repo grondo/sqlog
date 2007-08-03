@@ -1,0 +1,45 @@
+###############################################################################
+# $Id$
+###############################################################################
+#
+# sqlog(1) database configuration
+#
+#  Override defaults for 
+#    SQLHOST   Hostname for SQL db          (default = sqlhbost)
+#    SQLUSER   Read-only username for db    (default = slurm_read)
+#    SQLPASS   Read-only password           (default = no password)
+#    SQLDB     Database name for slurm data (default = slurm)
+#  
+#  This "config file" is read by perl's do() routine, so arbitrary
+#   perl can be used. (For example, to automatically determine the
+#   SQLHOST, etc.)
+#
+
+#  Must begin with package "conf".
+#
+package conf;
+
+use Genders;
+
+#  Only need to override SQLHOST for now. Other defaults are ok.
+$SQLHOST = get_sqlhost ();
+
+1;
+#
+#  Get cluster's "sqlhost" (altmgmt node for now)
+#   (Returns the ethernet hostname for the node, if available)
+#
+sub get_sqlhost
+{
+    my $genders = Genders->new();
+    my $host = "";
+
+    ($host) = $genders->getnodes("mysqld") or
+        &main::log_fatal ("Failed to get SQL host from mysqld genders attr.\n");
+
+    my $server = $genders->getattrval("altname", $host) or
+        &main::log_error ("Failed to get altname for $host.\n");
+
+    return $server || $host;
+}
+

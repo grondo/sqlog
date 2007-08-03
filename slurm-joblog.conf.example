@@ -1,0 +1,44 @@
+###############################################################################
+# $Id$
+###############################################################################
+#
+#  SLURM Job log utility config file. 
+#
+#  Allows configuration of the following:
+#
+#   SQLUSER     : The Read-write username for the DB
+#   SQLPASS     : Read-write password
+#   SQLROOTPASS : Root password (Needed for DB creation)
+#   JOBLOGFILE  : Location of joblog file (empty if you don't want a logfile) 
+#   SQLRWHOSTS  : Array of all hosts from which to allow RW user access.
+#
+package conf;
+use Genders;
+
+$SQLUSER = "slurm";
+$SQLPASS = "MyReadWritePassword";
+
+# Root password needed for creation of SLURM tables
+$SQLROOTPASS = "MyRootPassword";
+
+# Job log file. If no logfile, set to empty.
+$JOBLOGFILE = "/var/log/slurm/joblog";
+
+# Give rw access to slurm db from these hosts
+@SQLRWHOSTS = get_rw_nodes ();
+
+1;
+
+sub get_rw_nodes
+{
+	my $g = Genders->new ();
+	my @nodes = $g->getnodes ("mysqld");
+	push (@nodes, $g->getnodes ("primgmt"));
+	push (@nodes, $g->getnodes ("altmgmt"));
+
+	# Include altnames
+	push (@nodes, map { $g->getattrval ("altname", $_) } @nodes);
+
+	return (@nodes);
+}
+# vi: ts=4 sw=4
