@@ -8,7 +8,11 @@
 	* sqlog.conf.example, slurm-joblog.conf.example : 
 	  Add example config files.
 
+	* : tag v0.1.
+
 	* README, NEWS : Added.
+
+	* : tag v0.2.
 
 2007-07-27 Mark Grondona <mgrondona@llnl.gov>
 
