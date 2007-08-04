@@ -8,6 +8,8 @@
 	* sqlog.conf.example, slurm-joblog.conf.example : 
 	  Add example config files.
 
+	* README, NEWS : Added.
+
 2007-07-27 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog.1 : Update man page with new RANGE OPERATORS section.

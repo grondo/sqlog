@@ -1,0 +1,85 @@
+The sqlog package contains a set of scripts useful for creating, 
+populating, and issuing queries to a SLURM job log database. 
+
+COMPONENTS
+
+ sqlog          The "SLURM Query Log" utility. Provides a single interface to
+                query jobs from the SLURM job log database and/or current 
+                queue of running jobs.
+
+ slurm-joblog   Logs completed jobs using SLURM's jobcomp/script interface
+                to the SLURM job log database and an optional text file.
+
+ 
+ sqlog-db-util  Administrative utility used to create SLURM job log database
+                and its corresponding users. Also provides an interface to
+                "backfill" the database using existing SLURM joblog files
+                created by the jobcomp/filetxt plugin.
+
+ sqlog.conf     World-readable config file. Contains local configuration for
+                SQL host, read-only user, and read-only password.
+ 
+ slurm-joblog.conf
+                Private configuration for slurm-joblog script (also used by 
+                by sqlog-db-util). Contains SQL read-write user and password,
+                root user passwd (for sqlog-db-util) and a list of hosts
+		that should have RW access to DB.
+         
+ 
+CONFIGURATION
+
+For fully-automated operation, both the /etc/slurm/sqlog.conf and
+/etc/slurm/slurm-joblog.conf must exist. These files are read 
+using perl's do() function, so the files can and must be valid perl.
+This allows a bit of scripting to get the values if necessary.
+(See the sqlog doc directory for examples).
+
+The available variables in each config file include:
+
+ sqlog.conf:
+
+ SQLHOST          SQL server hostname (default = sqlhost)
+ SQLUSER          Read-only user      (default = slurm_read)
+ SQLPASS          Read-only password  (default = none)
+ SQLDB            DB name             (default = slurm)
+
+ slurm-joblog.conf:
+
+ SQLUSER          Read-write user     (default = slurm)
+ SQLPASS          Read-write password (not set)
+ SQLROOTPASS      DB root password    (not set)
+ @SQLRWHOSTS      Read-write hosts    (array of hosts to give rw access)
+ JOBLOGFILE       txt joblog location (set if you want to log to a file too)
+
+
+CREATING JOB LOG DATABASE
+
+Once the config files exist, the following command will create the 
+SLURM job log database:
+ 
+ sqlog-db-util --create
+
+If you have existing text joblog files you'd like to seed the new
+DB with, use 
+
+ sqlog-db-util --backfill [FILE]...
+
+e.g.
+
+ sqlog-db-util --backfill /var/log/slurm/joblog*
+
+ENABLE JOB LOGGING
+
+To enable the SLURM job log database, the following configuration
+options must be set in slurm.conf:
+
+ JobCompType = jobcomp/script
+ JobCompLoc = /usr/libexec/sqlog/slurm-joblog
+
+Adjust the path if the sqlog RPM was installed with a different PREFIX.
+This has only been tested on SLURM 1.2.10 or greater.
+
+Restart slurmctld and slurm-joblog will begin logging jobs as they
+complete.
+
+$Id$

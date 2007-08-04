@@ -40,7 +40,7 @@ rm -rf "$RPM_BUILD_ROOT"
 
 %files
 %defattr(-,root,root)
-%doc ChangeLog sqlog.conf.example slurm-joblog.conf.example
+%doc README NEWS ChangeLog sqlog.conf.example slurm-joblog.conf.example
 %{_bindir}/sqlog
 %{_sbindir}/sqlog-db-util
 %{_mandir}/*/*
