@@ -53,6 +53,7 @@ $conf{backfill} = "";
 $conf{create}   = 0;
 $conf{drop}     = 0;
 $conf{localhost}= 0;
+$conf{verbose}  = 0;
 
 GetOptions (
    "help|h"         => \$conf{help},

@@ -40,6 +40,11 @@ $conf{sqlhost} = "sqlhost";
 $conf{stmt}    = qq(INSERT INTO slurm_job_log VALUES (?,?,?,?,?,?,?,?,?,?,?,?));
 
 #
+#  Autocreate slurm_job_log DB if it doesn't exist?
+#
+$conf{autocreate} = 0;
+
+#
 #  Default job logfile. If empty, no logfile is used.
 #
 $conf{joblogfile} = "/var/log/slurm/joblog";
@@ -54,10 +59,10 @@ read_config ();
 get_slurm_vars ();
 
 #  Append job log to database.
-append_job_db ();
+my $success = append_job_db ();
 
-#  Append to text file.
-if ($conf{logfile}) {
+#  Append to text file.if requested or DB failed.
+if ($conf{logfile} || !$success) {
     append_joblog ();
 }
 
@@ -119,6 +124,7 @@ sub read_config
     $conf{sqluser}    = $conf::SQLUSER    if (defined $conf::SQLUSER);
     $conf{sqlpass}    = $conf::SQLPASS    if (defined $conf::SQLPASS);
     $conf{joblogfile} = $conf::JOBLOGFILE if (defined $conf::JOBLOGFILE);
+    $conf{autocreate} = $conf::AUTOCREATE if (defined $conf::AUTOCREATE);
 }
 
 
@@ -137,6 +143,32 @@ sub get_slurm_vars
     $conf{nodecount} = expand($conf{nodes});
 }
 
+sub create_db
+{
+    if (!$conf{autocreate}) {
+        log_error ("Failed to connect to DB at $conf{sqlhost}\n");
+        return (0);
+    }
+
+    my $cmd = "/usr/sbin/sqlog-db-util --create";
+    system ($cmd);
+    if ($?>>8) {
+        log_error ("'$cmd' exited with exit code ", $?>>8, "\n");
+        return (0);
+    }
+
+    log_msg ("Created DB $conf{db} at host $conf{sqlhost}\n");
+
+    return (1);
+}
+
+sub slurm_job_log_table_exists
+{
+    my ($dbh) = @_;
+    $dbh->do ("SELECT * FROM slurm_job_log LIMIT 1") || return 0;
+    return 1;
+}
+
 #
 #  Append data to SLURM job log (database)
 #
@@ -149,9 +181,21 @@ sub append_job_db
         return 0;
     }
 
-    my $dbh = DBI->connect( "DBI:mysql:database=slurm;host=" . $conf{sqlhost}, 
-                            $conf{sqluser}, $conf{sqlpass} ) 
-        or log_error "Failed to connect to DB at $conf{sqlhost}\n";
+    my $str = "DBI:mysql:database=$conf{db};host=$conf{sqlhost}";
+    my $dbh = DBI->connect($str, $conf{sqluser}, $conf{sqlpass});
+
+    if (!$dbh) {
+        create_db() 
+            or return (0);
+        $dbh = DBI->connect($str, $conf{sqluser}, $conf{sqlpass})
+            or return (0);
+    }
+
+    # Check for slurm_job_log table
+    if (!slurm_job_log_table_exists ($dbh)) {
+        log_msg ("SLURM job log table doesn't exist in DB. Creating.\n");
+        create_db () or return (0);
+    }
 
     my $sth = $dbh->prepare($conf{stmt}) 
         or log_error "prepare: ", $dbh->errstr, "\n";

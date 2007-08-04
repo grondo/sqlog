@@ -21,6 +21,9 @@ $SQLPASS = "MyReadWritePassword";
 # Root password needed for creation of SLURM tables
 $SQLROOTPASS = "MyRootPassword";
 
+# Attempt to autocreate DB if it doesn't exist
+$AUTOCREATE = 1;
+
 # Job log file. If no logfile, set to empty.
 $JOBLOGFILE = "/var/log/slurm/joblog";
 

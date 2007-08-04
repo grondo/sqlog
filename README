@@ -50,6 +50,8 @@ The available variables in each config file include:
  SQLROOTPASS      DB root password    (not set)
  @SQLRWHOSTS      Read-write hosts    (array of hosts to give rw access)
  JOBLOGFILE       txt joblog location (set if you want to log to a file too)
+ AUTOCREATE       Attempt to create DB if it doesn't yet exist the
+                  first time slurm-joblog is run (default = no).
 
 
 CREATING JOB LOG DATABASE
