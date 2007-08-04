@@ -26,11 +26,14 @@ database for logging SLURM jobs as they complete.
 %install
 rm -rf "$RPM_BUILD_ROOT"
 mkdir -p "$RPM_BUILD_ROOT"
+mkdir -p -m0755 $RPM_BUILD_ROOT/%{_libexecdir}/sqlog
+
 install -D -m 755 sqlog  ${RPM_BUILD_ROOT}/%{_bindir}/sqlog
 install -D -m 644 sqlog.1 ${RPM_BUILD_ROOT}/%{_mandir}/man1/sqlog.1
 install -D -m 755 sqlog-db-util ${RPM_BUILD_ROOT}/%{_sbindir}/sqlog-db-util
 install -D -m 755 slurm-joblog.pl \
 			${RPM_BUILD_ROOT}/%{_libexecdir}/sqlog/slurm-joblog
+
 
 %clean
 rm -rf "$RPM_BUILD_ROOT"
@@ -41,4 +44,4 @@ rm -rf "$RPM_BUILD_ROOT"
 %{_bindir}/sqlog
 %{_sbindir}/sqlog-db-util
 %{_mandir}/*/*
-%{_libexecdir}/sqlog/slurm-joblog
+%{_libexecdir}/sqlog
