@@ -5,6 +5,8 @@
 
 	* sqlog-db-util : Intialize $conf{verbose}.
 
+	* sqlog-db-util : Add --info option.
+
 2007-08-03 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog-db-util : Add Adam Moody's utility for creation of SLURM

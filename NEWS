@@ -1,3 +1,7 @@
+Version 0.3 (2007-08-04):
+ - Enable auto-creation of database from slurm-joblog script. 
+ - Add --info option to sqlog-db-util.
+
 Version 0.2 (2007-08-03):
  - Add README and NEWS files.
 

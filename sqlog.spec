@@ -14,7 +14,7 @@ Requires: slurm
 
 %description
 sqlog provides a system for creation, query, and population of a 
-database for logging SLURM jobs as they complete.
+database of SLURM job history. 
 
 
 %prep 

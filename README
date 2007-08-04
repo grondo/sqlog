@@ -70,6 +70,9 @@ e.g.
 
  sqlog-db-util --backfill /var/log/slurm/joblog*
 
+If AUTOCREATE is set in slurm-joblog.conf, then sqlog-db-util --create
+will be automatically run the first time the database is accessed.
+
 ENABLE JOB LOGGING
 
 To enable the SLURM job log database, the following configuration

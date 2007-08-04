@@ -36,7 +36,7 @@ logfiles.
     -c, --create    Create slurm database, slurm & slurm_read users, and table.
     -d, --drop      Drop existing table.
     -L, --localhost Connect to DB over localhost instead of configured SQL host.
-
+    -i, --info      Print information about current DB.
     -h, --help      Display this message.
     -v, --verbose   Be verbose.
 
@@ -54,6 +54,7 @@ $conf{create}   = 0;
 $conf{drop}     = 0;
 $conf{localhost}= 0;
 $conf{verbose}  = 0;
+$conf{info}     = 0;
 
 GetOptions (
    "help|h"         => \$conf{help},
@@ -61,11 +62,12 @@ GetOptions (
    "create|c"       => \$conf{create},
    "drop|d"         => \$conf{drop},
    "localhost|L"    => \$conf{localhost},
+   "info|i"         => \$conf{info},
    "verbose|v+"     => \$conf{verbose},
 ) or usage ();
 
-if (!$conf{create} && !$conf{drop} && !$conf{backfill}) {
-    log_error ("Specify at least one of --create, --drop, or --backfill\n");
+if (!$conf{create} && !$conf{drop} && !$conf{backfill} && !$conf{info}) {
+    log_error ("Specify at least one of --{create,drop,backfill,info}\n");
     usage ();
 }
 
@@ -126,6 +128,10 @@ if ($conf{backfill}) {
         log_fatal ("Backfill requested, but connection to database failed!\n")
     }
     backfill_from_files($dbh, @ARGV); 
+}
+
+if ($conf{info}) {
+    show_info ();
 }
 
 disconnect_db_rw ();
@@ -250,6 +256,27 @@ sub create_db
 
     # we're done
     log_verbose ("Done creating slurm joblog DB.\n");
+}
+
+sub show_info 
+{
+    my $dbh = connect_db_rw () or return;
+    my $stmt = "SELECT COUNT(*) FROM slurm.slurm_job_log;";
+    
+    my $sth = $dbh->prepare ($stmt) or return;
+
+    $sth->execute () or return;
+
+    my ($count) = $sth->fetchrow_array;
+
+    log_msg ("Information for SLURM job log DB:\n");
+    print "DB Host:   $conf{sqlhost}\n";
+    print "DB User:   $conf{ro}{sqluser}\n";
+    print "RW User:   $conf{rw}{sqluser}\n";
+    print "SLURM DB:  $conf{db}\n";
+    print "Job count: $count\n";
+    
+    return;
 }
 
 # given a dbh and list of slurm job completion logfiles, insert them into the dbh
