@@ -5,6 +5,12 @@
 	* sqlog.1 : Add a note about sqlog's "More results available..."
 	  message. Add some more examples.
 
+	* sqlog : When sorting start and end times, assume "NONE" to 
+	  mean "possibly infinite in the future" by faking a date 10 years
+	  from now. This allows sorting end time to work as expected since 
+	  all jobs that end in the future should have the greateast end
+	  time.
+
 2007-08-06 Adam Moody <moody20@llnl.gov>
 
 	* sqlog : Changed option order in help output to more closely match

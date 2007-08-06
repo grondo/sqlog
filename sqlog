@@ -812,7 +812,7 @@ sub parse_date
 
 sub sort_date
 {
-    my ($d1, $d2) = @_;
+    my ($d1, $d2) = map { /NONE/ ? "+10y" : $_ }  @_;
     return Date_Cmp (parse_date ($d1), parse_date ($d2));
 }
 
