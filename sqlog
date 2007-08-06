@@ -115,9 +115,6 @@ $conf{sqlhost}    = "sqlhost";
 #  Default max number of rows to fetch:
 $conf{limit}      = 25;
 
-#  Default format list:
-@{$conf{format}}  = qw/ jobid part name user state start runtime nnodes nodes /;
-
 #  Default format type:
 $conf{formattype} = "short";
 
@@ -144,6 +141,15 @@ $conf{formattype} = "short";
 #   each entry has the form Name => { Header, format char, width -1 }
 #
 
+%{$conf{format_list}} = (
+    "short" => 
+      [qw/ jobid part name user state start runtime nnodes nodes /],
+    "long"  => 
+      [qw/ jobid part name user state longstart longend runtime nnodes nodes /],
+    "freeform" =>
+      [qw/ jobid part name user state longstart longend runtime nnodes nodes /]
+    );
+
 $conf{fmt_spec}{short} = { 
     "jobid"     => { "name" => "JOBID",    "ch" => '>', "l" => 6 },
     "user"      => { "name" => "USER",     "ch" => '>', "l" => 7 },
@@ -154,9 +160,9 @@ $conf{fmt_spec}{short} = {
     "runtime"   => { "name" => "TIME",     "ch" => ">", "l" => 9 },
     "nnodes"    => { "name" => "N",        "ch" => ">", "l" => 3 },
     "nodes"     => { "name" => "NODELIST", "ch" => "*", "l" => 1 },
-    "end"       => { "name" => "END",      "ch" => "<", "l" =>13 },
+    "end"       => { "name" => "END",      "ch" => ">", "l" =>13 },
     "longstart" => { "name" => "START",    "ch" => ">", "l" =>18 },
-    "longend"   => { "name" => "END",      "ch" => "<", "l" =>18 }
+    "longend"   => { "name" => "END",      "ch" => ">", "l" =>18 }
     };
 
 $conf{fmt_spec}{long} = {
@@ -169,9 +175,9 @@ $conf{fmt_spec}{long} = {
     "runtime"   => { "name" => "TIME",     "ch" => ">", "l" => 8 },
     "nnodes"    => { "name" => "NODES",    "ch" => ">", "l" => 4 },
     "nodes"     => { "name" => "NODELIST", "ch" => "*", "l" => 1 },
-    "end"       => { "name" => "END",      "ch" => "<", "l" =>13 },
+    "end"       => { "name" => "END",      "ch" => ">", "l" =>13 },
     "longstart" => { "name" => "START",    "ch" => ">", "l" =>18 },
-    "longend"   => { "name" => "END",      "ch" => "<", "l" =>18 }
+    "longend"   => { "name" => "END",      "ch" => ">", "l" =>18 }
    };
 
 $conf{fmt_spec}{freeform} = {
@@ -184,8 +190,13 @@ $conf{fmt_spec}{freeform} = {
     "runtime"   => { "name" => "TIME",     "ch" => "*", "l" => 1 },
     "nnodes"    => { "name" => "NODES",    "ch" => "*", "l" => 1 },
     "nodes"     => { "name" => "NODELIST", "ch" => "*", "l" => 1 },
-    "end"       => { "name" => "END",      "ch" => "*", "l" => 1 }
+    "end"       => { "name" => "END",      "ch" => "*", "l" => 1 },
+    "longstart" => { "name" => "START",    "ch" => "*", "l" => 1 },
+    "longend"   => { "name" => "END",      "ch" => "*", "l" => 1 }
    };
+
+# Default format
+@{$conf{format}}  = @{$conf{format_list}{short}};
 
 # Short aliases for format specifiers
 #
@@ -504,9 +515,11 @@ sub check_format_list
         log_verbose ("set formattype = $conf{formattype}\n");
         log_fatal ("Invalid format type = \"$conf{formattype}\"\n") 
            unless exists $conf{fmt_spec}{$conf{formattype}};
+
+        @{$conf{format}} = @{$conf{format_list}{$conf{formattype}}};
     }
 
-    log_verbose ("formats = @_\n");
+    log_verbose ("formats = \"@_\"\n");
 
     for my $f (@_) {
         list_format_keys(), exit if ($f eq "list");
@@ -521,7 +534,9 @@ sub check_format_list
     }
 
     # reset format if  there's anything on the list
-    @{$conf{format}} = @_ if (@_);
+    if (@_) {
+        @{$conf{format}} = @_;
+    }
 
     return $rc;
 }
@@ -735,14 +750,15 @@ sub format_create
     my $values = "";
 
     my @form = @{$conf{format}};
-    
+
     my $fmt = $conf{fmt_spec}{$conf{formattype}};
     my $alias = $conf{fmt_spec}{aliases};
 
     for my $f (@form) {
         $f = $$alias{$f} if (!exists $$fmt{$f});
-        if (!exists $$fmt{$f}) {
+        if (!$f || !exists $$fmt{$f}) {
             log_error ("Skipping invalid format key \"$f\"\n");
+            next;
         }
         $common .= "@" . $$fmt{$f}{ch} x $$fmt{$f}{l} . " ";
     }

@@ -15,6 +15,10 @@
 
 	* sqlog-db-util : Reformat usage output.
 
+	* sqlog : Give each format type (short, long, freeform) its own 
+	  format list. Put "longstart" and "longend" into default format 
+	  lists for long and freeform output types.
+
 2007-08-06 Adam Moody <moody20@llnl.gov>
 
 	* sqlog : Changed option order in help output to more closely match
