@@ -32,13 +32,13 @@ Create SLURM job completion log database along with user accounts to
 access it, and/or backfill the database from SLURM job completion
 logfiles.
 
-    -b, --backfill  Backfill database from SLURM joblog files in ARGV.
-    -c, --create    Create slurm database, slurm & slurm_read users, and table.
-    -d, --drop      Drop existing table.
-    -L, --localhost Connect to DB over localhost instead of configured SQL host.
-    -i, --info      Print information about current DB.
     -h, --help      Display this message.
     -v, --verbose   Be verbose.
+    -d, --drop      Drop existing table.
+    -c, --create    Create slurm database, slurm & slurm_read users, and table.
+    -i, --info      Print information about current DB.
+    -b, --backfill  Backfill database from SLURM joblog files in ARGV.
+    -L, --localhost Connect to DB over localhost instead of configured SQL host.
 
 EOF
 ;

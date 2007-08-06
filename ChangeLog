@@ -11,6 +11,10 @@
 	  all jobs that end in the future should have the greateast end
 	  time.
 
+	* sqlog-db-util.8 : Added.
+
+	* sqlog-db-util : Reformat usage output.
+
 2007-08-06 Adam Moody <moody20@llnl.gov>
 
 	* sqlog : Changed option order in help output to more closely match

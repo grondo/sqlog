@@ -1,0 +1,77 @@
+.\" $Id$
+.\"
+
+.TH SQLOG-DB-UTIL 8 "SQLOG Database Utility"
+
+.SH NAME
+sqlog-db-util \- Utility for SLURM job log database maintenance
+
+.SH SYNOPSIS
+.B sqlog-db-util
+[\fIOPTIONS\fR]...
+
+.SH DESCRIPTION
+The \fBsqlog-db-util\fR utility is an interface for creating and
+backfilling the SLURM job log database used by the \fBsqlog\fR(1)
+command. It reads the sqlog.conf and slurm-joblog.conf files to
+determine the DB users, passwords, and SQL host it should use
+for DB creation. 
+
+.SH OPTIONS
+.TP 
+.BI "-h, --help"
+Display a usage message.
+.TP
+.BI "-v, --verbose"
+Increase verbosity.
+.TP
+.BI "-d, --drop"
+Drop existing slurm_job_log table in the configured database. Currently,
+this option doesn't remove SLURM job log users or DB.
+.TP
+.BI "-c, --create"
+Create the SLURM job log DB, the slurm_job_log table, and the associated
+read-only and read-write users.
+.TP
+.BI "-b, --backfill"
+Backfill the database with SLURM job information using the list of files
+provided on the command line. Files should be in the format created by
+SLURM's jobcomp/filetxt plugin. If the files end in .gz, they will be
+automatically unzipped at runtime.
+.TP
+.BI "-i, --info"
+Provide information about the currently configured DB, including the
+server hostname, read-only username, read-write username, SLURM job
+log database name, and the total number of jobs currently stored in
+the DB.
+.TP
+.BI "-L, --localhost"
+Override the SQL host configuration and connect to DB on localhost.
+(May be required if root user is only allowed access to DB via localhost)
+
+.SH EXAMPLES
+Create database:
+.nf
+
+   sqlog-db-util --create
+
+.fi
+Insert job records in database for all jobs in current SLURM txt joblog files:
+.nf
+
+   sqlog-db-util --backfill /var/log/slurm/joblog*
+
+.fi
+Drop any existing database, recreate using current configuration,
+ and seed the new database using SLURM joblog files:
+.nf 
+
+   sqlog-db-util -dcb /var/log/slurm/joblog*
+
+.fi
+
+.SH AUTHOR
+Written by Adam Moody and Mark Grondona.
+
+.SH SEE ALSO
+\fBsqlog\fR(1), /etc/slurm/sqlog.conf, /etc/slurm/slurm-joblog.conf
