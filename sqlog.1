@@ -34,13 +34,8 @@ Provide a comma-separated list of jobids to include (or exclude if
 preceded by the \fI-x\fR, \fI--exclude\fR option). This option may
 be specified multiple times.
 .TP
-.BI "-u, --users " LIST
-Provide a comma-separated list of users to include (or exclude if
-preceded by the \fI-x\fR, \fI--exclude\fR option). This option may
-be specified multiple times.
-.TP
-.BI "-p, --partitions " LIST
-Provide a comma-separated list of partitions to include (or exclude if
+.BI "-J, --job-names " LIST
+Provide a comma-separated list of job names to include (or exclude if
 preceded by the \fI-x\fR, \fI--exclude\fR option). This option may
 be specified multiple times.
 .TP
@@ -50,8 +45,8 @@ Provide a comma-separated list of nodes or node lists to include
 be specified multiple times. Node lists can be in hostlist format,
 e.g. host[34-36,67].
 .TP
-.BI "-J, --job-names " LIST
-Provide a comma-separated list of job names to include (or exclude if
+.BI "-p, --partitions " LIST
+Provide a comma-separated list of partitions to include (or exclude if
 preceded by the \fI-x\fR, \fI--exclude\fR option). This option may
 be specified multiple times.
 .TP
@@ -60,6 +55,11 @@ Provide a comma-separated list of job states to include (or exclude if
 preceded by the \fI-x\fR, \fI--exclude\fR option). This option may
 be specified multiple times. Use --states=list to generate list of valid
 job state keys.
+.TP
+.BI "-u, --users " LIST
+Provide a comma-separated list of users to include (or exclude if
+preceded by the \fI-x\fR, \fI--exclude\fR option). This option may
+be specified multiple times.
 .TP
 .BI "-x, --exclude"
 Exclude the following list of jobids, users, partitions, nodes, job names,
@@ -80,14 +80,6 @@ the option \fB--nnodes\fR=+\fIN\fR.
 Explicity specify a maximum node count. This is equivalent to using
 the option \fB--nnodes\fR=-\fIN\fR.
 .TP
-.BI "-t, --time, --at " TIME
-List jobs which were running at a particular date and time.
-\fITIME\fR arguments are parsed by the perl \fBDate::Manip\fR(3pm)
-package, so many date/time formats are allowed, i.e. 2pm or
-"4/14 15:30:00". A window of time may be specified by separating the
-start and end of the window with "..", e.g. \fB--time\fR=2pm..3pm.
-For more information see the RANGE OPERATORS section below.
-.TP
 .BI "-T, --runtime " DURATION
 List jobs that ran or have run for \fIDURATION\fR. \fIDURATION\fR may
 have the form DD-HH:MM:SS or DDdHHhMMmSSs, where DD is days, HH
@@ -105,6 +97,14 @@ This is equivalent to specifying \fB--runtime\fR=+\fIDURATION\fR.
 .BI "--maxtime " DURATION
 List all jobs that ran for at most \fIDURATION\fR.
 This is equivalent to specifying \fB--runtime\fR=-\fIDURATION\fR.
+.TP
+.BI "-t, --time, --at " TIME
+List jobs which were running at a particular date and time.
+\fITIME\fR arguments are parsed by the perl \fBDate::Manip\fR(3pm)
+package, so many date/time formats are allowed, i.e. 2pm or
+"4/14 15:30:00". A window of time may be specified by separating the
+start and end of the window with "..", e.g. \fB--time\fR=2pm..3pm.
+For more information see the RANGE OPERATORS section below.
 .TP
 .BI "-S, --start " TIME
 List all jobs that started at date and time \fITIME\fR. \fITIME\fR may
@@ -137,6 +137,17 @@ equivalent to using \fB--end\fR=+\fITIME\fR.
 List all jobs that ended (or will end) before time \fITIME\fR. This is 
 equivalent to using \fB--end\fR=-\fITIME\fR.
 .TP
+.BI "-X, --no-running" 
+Do not query running jobs, i.e. ignore the current queue and only
+query the SLURM job log database.
+.TP
+.BI "--no-db"
+Do not query the SLURM job log database, i.e. only query the current
+queue.
+.TP
+.BI "-H, --no-header"
+Do not display header rows in output.
+.TP
 .BI "-o, --format " LIST
 Specify a list of format keys to display or a format type, or both
 using the form \fITYPE\fR:\fIKEYS\fR... Use \fB--format\fR=list to
@@ -147,23 +158,12 @@ Specify a list of keys on which to sort output. Prepend a '-' to sort
 in descending as opposed to ascending order. List valid keys
 using \fB--sort\fR=list. The default sort method is '-start'. 
 .TP
-.BI "-X, --no-running" 
-Do not query running jobs, i.e. ignore the current queue and only
-query the SLURM job log database.
-.TP
-.BI "--no-db"
-Do not query the SLURM job log database, i.e. only query the current
-queue.
-.TP
-.BI "--limit " N
+.BI "-L, --limit " N
 Limit the number of records to report (Default = 25).
 .TP
-.BI "--all"
+.BI "-a, --all"
 Do not limit the number of returned results. (Return all matching rows).
 This is equivalent to \fB--limit\fR=0.
-.TP
-.BI "-H, --no-header"
-Do not display header rows in output.
 
 .SH RANGE OPERATORS
 \fITIME\fR, \fIDURATION\fR, and numeric arguments may use the RANGE OPERATORS

@@ -30,12 +30,12 @@ Query information about jobs from the SLURM job log database and/or the
 current queue of running jobs.
 
     -j, --jobids=LIST...     Comma-separated list of jobids.
-    -u, --users=LIST...      Comma-separated list of users.
-    -p, --partitions=LIST... Comma-separated list of partitions.
-    -n, --nodes=LIST...      Comma-separated list of nodes or node lists.
     -J, --job-names=LIST...  Comma-separated list of job names.
+    -n, --nodes=LIST...      Comma-separated list of nodes or node lists.
+    -p, --partitions=LIST... Comma-separated list of partitions.
     -s, --states=LIST...     Comma-separated list of job states. 
                               Use '--states=list' to list valid state names.
+    -u, --users=LIST...      Comma-separated list of users.
 
     -x, --exclude            Exclude the following list of jobids, users, 
                               states, partitions, or nodes.
@@ -44,6 +44,11 @@ current queue of running jobs.
                               specified using the RANGE syntax described below.
         --minnodes=N         Explicitly specify the minimum number of nodes.
         --maxnodes=N         Explicitly specify the maximum number of nodes.
+
+    -T, --runtime=DURATION   List jobs that ran for DURATION, e.g., '4:30:00' or
+                              '4h30m'. RANGE operators apply.
+        --mintime=DURATION   Explicitly specify the minimum runtime.
+        --maxtime=DURATION   Explicitly specify the maximum runtime.
 
     -t, --time, --at=TIME    List jobs which were running at a particular date 
                               and time, e.g., '04/14 13:30:00' or 'today,2pm'.
@@ -57,15 +62,10 @@ current queue of running jobs.
         --end-before=TIME    Explicitly specify maximum end time.
         --end-after=TIME     Explicitly specify minimum end time.
 
-
-    -T, --runtime=DURATION   List jobs that ran for DURATION, e.g., '4:30:00' or
-                              '4h30m'. RANGE operators apply.
-        --mintime=DURATION   Explicitly specify the minimum runtime.
-        --maxtime=DURATION   Explicitly specify the maximum runtime.
-
     -X, --no-running         Don't query running jobs (no current queue).
         --no-db              Include only running jobs (don't query joblog DB).
 
+    -H, --no-header          Don't print a header row.
     -o, --format=LIST        Specify a list of format keys to display or a 
                               format type, or both using the form 'TYPE:keys,..'
                               Use --format=list to list valid keys and types.
@@ -74,7 +74,6 @@ current queue of running jobs.
 
     -L, --limit=N            Limit the number of records to report (default=25).
     -a, --all                Report all matching records (Same as --limit=0).
-    -H, --no-header          Don't print a header row.
 
     -h, --help               Display this message.
     -v, --verbose            Increase output verbosity.
