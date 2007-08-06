@@ -126,7 +126,15 @@ $conf{formattype} = "short";
 @{$conf{dbnames}} = qw/ id jobid user uid name state partition limit 
                         start end nodes nnodes runtime /;
 #  Default sort keys:
-@{$conf{sortkeys}} = qw/ -start /;
+@{$conf{sortkeys}} = qw/ start /;
+
+#  Map of sort keys to DB fields
+%{$conf{sortfield}}= ( "id" => "id", "jobid" => "jobid", "user" => "username",
+                       "uid" => "userid", "name" => "jobname", 
+                       "state" => "jobstate", "partition" => "partition",
+                       "limit" => "timelimit", "start" => "starttime",
+                       "end" => "endtime", "nodes" => "nodelist",
+                       "nnodes" => "nodecount", "runtime" => "runtime" );
 
 #  Array for results:
 @{$conf{results}}= ();
@@ -235,14 +243,16 @@ exit 0 if ($conf{dry_run});
 query_running_jobs () unless ($conf{no_running});
 
 #  Execute DB query and grab results:
-if (  (!$conf{limit} || scalar @{$conf{results}} < $conf{limit}) 
-    && !$conf{nodb}) {
-    run_query ();
-}
+run_query () unless ($conf{nodb});
 
 #  Sort by requested keys
 log_verbose ("sorting by keys @{$conf{sortkeys}}\n");
 @{$conf{results}} = sort sort_by_keys (@{$conf{results}});
+
+#  Limit results
+if (@{$conf{results}} && $conf{limit}) {
+    @{$conf{results}} = @{$conf{results}}[0 .. $conf{limit} - 1];
+}
 
 #  Apply any post-processing to results fields:
 reformat_results (@{$conf{results}});
@@ -819,7 +829,7 @@ sub sort_by_keys
 
     for (@{$conf{sortkeys}}) {
         $rc = &{"sort_$_"} ($a, $b);
-        return ($conf{sortreverse}{$_} ? -$rc : $rc) if ($rc);
+        return ($conf{sortreverse}{$_} ? $rc : -$rc) if ($rc);
     }
     return $rc;
 }
@@ -841,6 +851,8 @@ sub reformat_results
 {
     my (@rows) = @_;
     for my $r (@rows) {
+        next if (!$r->{start});
+        
         # Drop year for shorter start and end times.
         $$r{end} =~ s#^(\d+)-(\d+)-(\d+) #$2/$3-#;
         $$r{start} =~ s#^(\d+)-(\d+)-(\d+) #$2/$3-#;
@@ -872,7 +884,7 @@ sub run_query
         push (@{$conf{results}}, \%r);
         $count++;
 
-        last if ($conf{limit} && ($#{$conf{results}} > $conf{limit} - 1));
+        #last if ($conf{limit} && ($#{$conf{results}} > $conf{limit} - 1));
     }
 
     log_verbose ("Fetched $count rows.\n");
@@ -922,6 +934,19 @@ sub stmt_list
     }
 
     return (@result);
+}
+
+sub order_by
+{
+    my @s = ();
+    for my $key (@{$conf{sortkeys}}) {
+        my $field = $conf{sortfield}{$key};
+        push (@s, "$field " . ($conf{sortreverse}{$key} ? "ASC" : "DESC"));
+    }
+
+    return "" if (!@s);
+
+    return " ORDER BY " . join ',', @s;
 }
 
 sub compose_query 
@@ -998,7 +1023,7 @@ sub compose_query
 
     $stmt .= " WHERE " . join " AND ", @stmts if (@stmts);
     $stmt .= " HAVING " . join " AND ", @have if (@have);
-    $stmt .= " ORDER BY starttime DESC";
+    $stmt .= order_by ();
 
     if ($conf{limit} && !@{$conf{nodes}} && !@{$conf{exclude}{nodes}}) {
         $stmt .= " LIMIT " . ($conf{listlimit} || $conf{limit});
@@ -1125,9 +1150,10 @@ sub query_running_jobs
 
         push (@{$conf{results}}, \%r);
 
-        last if ($conf{limit} && ($#{$conf{results}} > $conf{limit} - 1));
+        #last if ($conf{limit} && (@{$conf{results}} == $conf{limit}));
     }
 
+    log_verbose (scalar @{$conf{results}}, " running jobs selected.\n");
     close (SQ);
 }
 
