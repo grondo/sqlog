@@ -268,8 +268,8 @@ format_create ();
 #  Output results:
 write () for (@{$conf{results}});
 
-if ($conf{total_results} > @{$conf{results}}) {
-    print STDERR "[More results available...]\n";
+if (($conf{total_results} > @{$conf{results}}) && !$conf{noheader}) {
+    log_msg ("[More results available...]\n");
 }
 
 exit 0;

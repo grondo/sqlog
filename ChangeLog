@@ -9,6 +9,9 @@
 	* sqlog : Add "longstart" and "longend" format keys which print start 
 	  and end datetime in the format "%Y-%m-%dT%H:%M:%S".
 
+	* sqlog : Don't display informational message about more results if
+	  -H, --no-header was supplied.
+
 2007-08-04 Mark Grondona <mgrondona@llnl.gov>
 
 	* slurm-joblog.pl, slurm-joblog.conf.example, README :
