@@ -12,6 +12,9 @@
 	* sqlog : Don't display informational message about more results if
 	  -H, --no-header was supplied.
 
+	* sqlog : Fix typo in initialization of config arrays that caused
+	  selection of job states to break.
+
 2007-08-04 Mark Grondona <mgrondona@llnl.gov>
 
 	* slurm-joblog.pl, slurm-joblog.conf.example, README :

@@ -285,7 +285,7 @@ sub conf_init
     $conf{got_exclude}            = 0;
     @{$conf{userfmt}}             = ();
 
-    for (qw/jobids users starts partitions nodes job_names/) {
+    for (qw/jobids users states partitions nodes job_names/) {
         @{$conf{$_}} = ();
         @{$conf{exclude}{$_}} = ();
     }
