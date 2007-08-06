@@ -250,9 +250,10 @@ log_verbose ("sorting by keys @{$conf{sortkeys}}\n");
 @{$conf{results}} = sort sort_by_keys (@{$conf{results}});
 
 #  Limit results
-if (@{$conf{results}} && $conf{limit}) {
+$conf{total_results} = scalar @{$conf{results}};
+if (@{$conf{results}} && $conf{limit} && (@{$conf{results}} > $conf{limit})) {
     @{$conf{results}} = @{$conf{results}}[0 .. $conf{limit} - 1];
-}
+} 
 
 #  Apply any post-processing to results fields:
 reformat_results (@{$conf{results}});
@@ -262,6 +263,10 @@ format_create ();
 
 #  Output results:
 write () for (@{$conf{results}});
+
+if ($conf{total_results} > @{$conf{results}}) {
+    print STDERR "[More results available...]\n";
+}
 
 exit 0;
 
@@ -1025,8 +1030,11 @@ sub compose_query
     $stmt .= " HAVING " . join " AND ", @have if (@have);
     $stmt .= order_by ();
 
+    #  If there is a limit enforced, get no more results than one
+    #   more than the imposed limit.
+    #
     if ($conf{limit} && !@{$conf{nodes}} && !@{$conf{exclude}{nodes}}) {
-        $stmt .= " LIMIT " . ($conf{listlimit} || $conf{limit});
+        $stmt .= " LIMIT " . (($conf{listlimit} || $conf{limit}) + 1);
     }
 
     return ($stmt);

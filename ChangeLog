@@ -3,6 +3,9 @@
 	* sqlog : Apply sort keys to "ORDER BY" DB query. Also, reverse
 	  the sense of "-" on sort keys to be more intuitive.
 
+	* sqlog : Print "More results available..." if not all results
+	  were displayed due to --limit.
+
 2007-08-04 Mark Grondona <mgrondona@llnl.gov>
 
 	* slurm-joblog.pl, slurm-joblog.conf.example, README :
