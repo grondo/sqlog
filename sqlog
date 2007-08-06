@@ -155,7 +155,9 @@ $conf{fmt_spec}{short} = {
     "runtime"   => { "name" => "TIME",     "ch" => ">", "l" => 9 },
     "nnodes"    => { "name" => "N",        "ch" => ">", "l" => 3 },
     "nodes"     => { "name" => "NODELIST", "ch" => "*", "l" => 1 },
-    "end"       => { "name" => "END",      "ch" => "<", "l" =>13 }
+    "end"       => { "name" => "END",      "ch" => "<", "l" =>13 },
+    "longstart" => { "name" => "START",    "ch" => ">", "l" =>18 },
+    "longend"   => { "name" => "END",      "ch" => "<", "l" =>18 }
     };
 
 $conf{fmt_spec}{long} = {
@@ -168,7 +170,9 @@ $conf{fmt_spec}{long} = {
     "runtime"   => { "name" => "TIME",     "ch" => ">", "l" => 8 },
     "nnodes"    => { "name" => "NODES",    "ch" => ">", "l" => 4 },
     "nodes"     => { "name" => "NODELIST", "ch" => "*", "l" => 1 },
-    "end"       => { "name" => "END",      "ch" => "<", "l" =>13 }
+    "end"       => { "name" => "END",      "ch" => "<", "l" =>13 },
+    "longstart" => { "name" => "START",    "ch" => ">", "l" =>18 },
+    "longend"   => { "name" => "END",      "ch" => "<", "l" =>18 }
    };
 
 $conf{fmt_spec}{freeform} = {
@@ -855,12 +859,30 @@ sub sort_by_start
 sub reformat_results
 {
     my (@rows) = @_;
+    my $year = (localtime (time))[5] + 1900;
     for my $r (@rows) {
         next if (!$r->{start});
         
         # Drop year for shorter start and end times.
+        #  Save year for possible inclusion in output.
+        $$r{longend} = $$r{end};
+        $$r{longstart} = $$r{start};
+
         $$r{end} =~ s#^(\d+)-(\d+)-(\d+) #$2/$3-#;
         $$r{start} =~ s#^(\d+)-(\d+)-(\d+) #$2/$3-#;
+
+        # Reformat long output so it all looks the same.
+        $$r{longend} =~ s#^(\d+)-(\d+)-(\d+) #$1-$2-$3T# 
+            || $$r{longend} =~ s#^(\d+)/(\d+)-#$year-$1-$2T#;
+
+        if (!($$r{longstart} =~ s#^(\d+)-(\d+)-(\d+) #$1-$2-$3T#)) {
+            #  If start date&time is after end date&time, then probably
+            #   the start date is last year
+            my $s = parse_date ($$r{start});
+            my $e = parse_date ($$r{end});
+            $year-- if (Date_Cmp ($s, $e) > 0);
+            $$r{longstart} =~ s#^(\d+)/(\d+)-#$year-$1-$2T#;
+        }
 
         $$r{runtime} = format_runtime ($$r{runtime});
 

@@ -6,6 +6,9 @@
 	* sqlog : Print "More results available..." if not all results
 	  were displayed due to --limit.
 
+	* sqlog : Add "longstart" and "longend" format keys which print start 
+	  and end datetime in the format "%Y-%m-%dT%H:%M:%S".
+
 2007-08-04 Mark Grondona <mgrondona@llnl.gov>
 
 	* slurm-joblog.pl, slurm-joblog.conf.example, README :
