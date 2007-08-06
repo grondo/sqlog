@@ -1,3 +1,7 @@
+2007-08-06 Mark Grondona <mgrondona@llnl.gov>
+
+	* sqlog.spec : Add perl-DateManip and gendersllnl to Requires.
+
 2007-08-06 Adam Moody <moody20@llnl.gov>
 
 	* sqlog : Changed option order in help output to more closely match
@@ -5,6 +9,20 @@
 
 	* sqlog.1 : Added -L and -a, which were missing.  Changed option
 	  listing order slightly to group options by function.
+
+2007-08-06 Mark Grondona <mgrondona@llnl.gov>
+
+	* sqlog : Apply sort keys to "ORDER BY" in DB query. Also, reverse
+	  the sense of '-' on sort keys to be more intuitive.
+
+	* sqlog : Print "More results available..." if not all results from
+	  DB and/or queue were displayed due to --limit.
+
+	* sqlog : Add "longstart" and "longend" format keys which print start
+	  and end datetime in format "%Y-%m-%dT%H:%M:%S".
+
+	* sqlog : Fix typo in initialization of config arrays that caused
+	  selection of job states to break.
 
 2007-08-04 Mark Grondona <mgrondona@llnl.gov>
 

@@ -8,7 +8,7 @@ License:   GPL
 Source:    %{name}-%{version}.tgz
 BuildRoot: %{_tmppath}/%{name}-%{version}
 BuildArch: noarch
-Requires: slurm
+Requires: slurm perl-DateManip gendersllnl
 
 %define debug_package %{nil}
 
