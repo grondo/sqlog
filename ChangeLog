@@ -2,6 +2,9 @@
 
 	* sqlog.spec : Add perl-DateManip and gendersllnl to Requires.
 
+	* sqlog.1 : Add a note about sqlog's "More results available..."
+	  message. Add some more examples.
+
 2007-08-06 Adam Moody <moody20@llnl.gov>
 
 	* sqlog : Changed option order in help output to more closely match

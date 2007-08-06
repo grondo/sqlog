@@ -17,6 +17,14 @@ of running jobs.
 
 By default both the current queue of running jobs and the database
 of completed jobs are queried, and a limit of 25 results is displayed.
+If more results are available in the database or queue, sqlog will
+note the fact with an informational message to stderr:
+.nf 
+
+    sqlog: [More results available....]
+.fi 
+
+This message is suppressed if the --\fBno-header\fR option is provided.
 
 .SH OPTIONS
 .TP
@@ -217,7 +225,7 @@ Display the job or jobs that were running on host55 at July 19, 4:00PM:
 Display at most 25 jobs that were running at midnight yesterday:
 .nf
 
-	sqlog --time=yesterday,midnight
+    sqlog --time=yesterday,midnight
 
 .fi
 Display all jobs that failed between 8:00AM and 9:00AM this morning,
@@ -250,8 +258,15 @@ greater and completed normally:
 List current queue, sorted by number of nodes (ascending):
 .nf
 
-	sqlog --all --no-db --sort=nnodes
+    sqlog --all --no-db --sort=nnodes
 
+.fi
+List the top 10 longest running jobs, and then the 5 oldest jobs:
+.nf
+
+    sqlog --sort=runtime --limit=10
+    sqlog --sort=-start --limit=5
+	
 .fi
 .SH AUTHOR
 Written by Adam Moody and Mark Grondona.
