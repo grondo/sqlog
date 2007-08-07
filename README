@@ -42,6 +42,7 @@ The available variables in each config file include:
  SQLUSER          Read-only user      (default = slurm_read)
  SQLPASS          Read-only password  (default = none)
  SQLDB            DB name             (default = slurm)
+ %FORMATS         Hash of format aliases (e.g. "f1" => "jid,name,user,state")
 
  slurm-joblog.conf:
 
