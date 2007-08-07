@@ -1,3 +1,9 @@
+2007-08-07 Mark Grondona <mgrondona@llnl.gov>
+
+	* sqlog-db-util : Failsafe check for existence of slurm_job_log
+	  table in create_db(). Create SLURM DB with "IF NOT EXISTS" to 
+	  avoid error.
+
 2007-08-06 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog.spec : Add perl-DateManip and gendersllnl to Requires.

@@ -144,9 +144,13 @@ exit 0;
 
 sub connect_db_rw
 {
-    my $dbh = DBI->connect("DBI:mysql:database=$conf{db};host=$conf{sqlhost}:", 
-            $conf{rw}{sqluser}, $conf{rw}{sqlpass});
+    my $cstr = "DBI:mysql(PrintError=>0):" .
+               "database=$conf{db};host=$conf{sqlhost}:";
+
+    my $dbh = DBI->connect($cstr, $conf{rw}{sqluser}, $conf{rw}{sqlpass});
+
     $conf{dbh}{rw} = $dbh;
+
     return ($dbh);
 }
 
@@ -169,6 +173,13 @@ sub connect_db_root
                       $DBI::errstr, "\n");
 
     return ($conf{dbh}{root});
+}
+
+sub slurm_job_log_table_exists
+{
+    my $dbh = connect_db_rw () or return 0;
+    $dbh->do ("DESCRIBE $conf{db}.slurm_job_log;") or return 0;
+    return 1;
 }
 
 sub read_config 
@@ -215,16 +226,20 @@ sub create_db
     my $dbh = connect_db_root () 
         or log_fatal ("Couldn't connect to database as root\n");
 
+    #  
+    #  Abort if slurm_job_log table already exists.
+    if (slurm_job_log_table_exists ()) {
+        log_msg ("create: SLURM job log table exists. No create necessary.\n");
+        return;
+    }
+
     #############################
     # Create slurm db / table
     #############################
 
     log_verbose ("Creating slurm DB\n");
-    do_sql ($dbh, "CREATE DATABASE $conf{db};"); # Create the slurm database
+    do_sql ($dbh, "CREATE DATABASE IF NOT EXISTS $conf{db};"); 
     do_sql ($dbh, "USE $conf{db};");             # Switch to use the db
-
-    log_verbose ("Dropping existing slurm_job_log table\n");
-    drop_slurm_joblog_table ($dbh);              
 
     log_verbose ("Creating new slurm_job_log table\n");
     create_slurm_joblog_table ($dbh);            
