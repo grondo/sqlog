@@ -22,9 +22,22 @@ note the fact with an informational message to stderr:
 .nf 
 
     sqlog: [More results available....]
-.fi 
 
-This message is suppressed if the --\fBno-header\fR option is provided.
+.fi 
+This message is suppressed if the \fB--no-header\fR option is provided.
+
+.SH CONFIGURATION
+
+\fBsqlog\fR reads configuration from the \fBsqlog.conf\fR config file
+(typically in /etc/slurm). This config file provides information about
+the SLURM job log database location and username.  In addition,
+\fBsqlog\fR  reads user defaults and additional output format types
+from a ~/.sqlog file if it exists. See the USER CONFIG section
+below for more information.
+
+Various config parameters are set in the following order:
+Internal defaults, system configuration, user configuration, 
+and command-line.
 
 .SH OPTIONS
 .TP
@@ -214,6 +227,44 @@ Jobs that were running exactly at one hour ago.
 Jobs that were running between 2 hours ago and 1 hour ago.
 
 
+.SH USER CONFIGURATION
+When \fBsqlog\fR runs, it will first check for a ~/.sqlog file and 
+parse it if it exists. At this time, the ~/.sqlog file may be used 
+to set a new default limit (see \fB--limit\fR) and addtional output format 
+types (see \fB--format\fR). These two configuration parameters take the form:
+.TP 20
+\fBlimit\fR = \fIN\fR
+Set the new default output limit to \fIN\fR.
+.TP
+\fBformat{\fINAME\fB}\fR = \fILIST...\fR
+Create an alias \fINAME\fR for the format list \fILIST\fR.
+.PP
+For example, the following sqlog file
+.nf
+    #  Sample ~/.sqlog file
+    limit = 30
+    format{mine} = long:start,end,jobid,user,state
+
+.fi
+would set the default output limit to 30 records and 
+add a new format type \fImine\fR. The new format type would 
+be used by specifying 
+.nf
+
+    \fB--format\fR \fImine\fR
+
+.fi 
+on the command line, which would be equivalent to 
+.nf
+
+    \fB--format\fR long:start,end,jobid,user,state
+
+.fi
+Any number of format types may be specified in this way, though
+if there are duplicate names, the last one specified will override
+all previous types. This also implies that a user can redefine
+the default \fBsqlog\fR format types \fIshort\fR, \fIlong\fR,
+and \fIfreeform\fR, though this is not recommended.
 
 .SH EXAMPLES
 Display the job or jobs that were running on host55 at July 19, 4:00PM:

@@ -24,6 +24,9 @@ use Genders;
 #  Only need to override SQLHOST for now. Other defaults are ok.
 $SQLHOST = get_sqlhost ();
 
+#  Example of adding new format list
+%FORMATS = ( "sys1" => "jid,user,name,start,end" );
+
 1;
 #
 #  Get cluster's "sqlhost" (altmgmt node for now)

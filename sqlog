@@ -137,18 +137,24 @@ $conf{formattype} = "short";
 
 #############################################################################
 #
+#  Output formats:
+
+#
+#  Default format key lists. May be overridded in system and user config.
+#
+%{$conf{format_list}} = (
+    "short" => 
+        "jobid,part,name,user,state,start,runtime,nnodes,nodes,",
+    "long"  => 
+        "jobid,part,name,user,state,longstart,longend,runtime,nnodes,nodes",
+    "freeform" => 
+        "jobid,part,name,user,state,longstart,longend,runtime,nnodes,nodes"
+    );
+
+#
 #  Format specification for all format types
 #   each entry has the form Name => { Header, format char, width -1 }
 #
-
-%{$conf{format_list}} = (
-    "short" => 
-      [qw/ jobid part name user state start runtime nnodes nodes /],
-    "long"  => 
-      [qw/ jobid part name user state longstart longend runtime nnodes nodes /],
-    "freeform" =>
-      [qw/ jobid part name user state longstart longend runtime nnodes nodes /]
-    );
 
 $conf{fmt_spec}{short} = { 
     "jobid"     => { "name" => "JOBID",    "ch" => '>', "l" => 6 },
@@ -196,7 +202,7 @@ $conf{fmt_spec}{freeform} = {
    };
 
 # Default format
-@{$conf{format}}  = @{$conf{format_list}{short}};
+@{$conf{format}}  = ();
 
 # Short aliases for format specifiers
 #
@@ -319,6 +325,38 @@ sub conf_init
     $conf{help}                   = 0;
 }
 
+sub read_user_config
+{
+    my $conf = "$ENV{HOME}/.sqlog";
+    my $line = 0;
+
+    return unless open (CONF, "$conf");
+
+    while (<CONF>) {
+        $line++;
+        chomp;
+        s/#.*$//;
+        s/^\s+(.*)\s+$/$1/;
+        next unless $_;
+
+        my ($key, $value) = /(\S+) *= *(.*)/;
+
+        if (!$key || !$value) {
+            log_error ("$conf: $line: Parse error. Ignoring.\n");
+            next;
+        }
+
+        if ($key =~ /format\{(.*)\}/) {
+            $conf{format_list}{$1} = $value;
+        }
+        elsif ($key eq "limit") {
+            $conf{limit} = $value;
+        }
+    }
+
+    close (CONF);
+}
+
 sub read_config
 {
     for my $f ("/etc/slurm/sqlog.conf") {
@@ -330,7 +368,15 @@ sub read_config
         $conf{sqlhost} = $conf::SQLHOST if (defined $conf::SQLHOST);
         $conf{sqluser} = $conf::SQLUSER if (defined $conf::SQLUSER);
         $conf{db}      = $conf::SQLDB   if (defined $conf::SQLDB);
+
+        if (defined %conf::FORMATS) {
+            for my $key (keys %conf::FORMATS) {
+                $conf{format_list}{$key} = $conf::FORMATS{$key};
+            }
+        }
     }
+
+    read_user_config ();
 }
 
 sub parse_cmdline 
@@ -398,7 +444,7 @@ sub parse_cmdline
 
     $conf{no_running} = 0 if $conf{nodb};
 
-    check_format_list (@{$conf{userfmt}}) or exit 1 if (@{$conf{userfmt}});
+    set_format_list () or exit 1;
 
     check_state_lists () or exit 1;
 
@@ -487,6 +533,7 @@ sub check_state_lists
     return 1;
 }
 
+
 sub list_format_keys
 {
     print STDERR "$progname: Valid format keys: ";
@@ -515,11 +562,7 @@ sub check_format_list
         log_verbose ("set formattype = $conf{formattype}\n");
         log_fatal ("Invalid format type = \"$conf{formattype}\"\n") 
            unless exists $conf{fmt_spec}{$conf{formattype}};
-
-        @{$conf{format}} = @{$conf{format_list}{$conf{formattype}}};
     }
-
-    log_verbose ("formats = \"@_\"\n");
 
     for my $f (@_) {
         list_format_keys(), exit if ($f eq "list");
@@ -539,6 +582,43 @@ sub check_format_list
     }
 
     return $rc;
+}
+
+sub split_format 
+{
+    grep { $_ !~ /^\s*$/ } split (/,/, $_[0]);
+}
+
+sub set_format_list
+{
+    #
+    #  Set the default
+    #
+    if (!@{$conf{userfmt}}) {
+        @{$conf{userfmt}} = split_format ($conf{format_list}{$conf{formattype}});
+    }
+
+    #
+    #  Check for format type specification (e.g. long, freeform)
+    #   and replace userfmt list with its specification
+    #
+    if ((scalar @{$conf{userfmt}} == 1)
+       && (grep { $conf{userfmt}[0] eq $_ } keys %{$conf{format_list}}) ) {
+        my $fmt = $conf{format_list}{$conf{userfmt}[0]};
+        @{$conf{userfmt}} = split_format ($fmt);
+    } 
+
+    #
+    #  Check user provided format list
+    #
+    if (@{$conf{userfmt}}) {
+        check_format_list (@{$conf{userfmt}}) or return undef;
+    }
+
+    log_fatal ("No format keys!") if (!@{$conf{format}});
+
+    log_verbose ("format: @{$conf{format}}\n");
+    return 1;
 }
 
 sub set_nnodes
@@ -756,7 +836,8 @@ sub format_create
 
     for my $f (@form) {
         $f = $$alias{$f} if (!exists $$fmt{$f});
-        if (!$f || !exists $$fmt{$f}) {
+        next unless $f;
+        if (!exists $$fmt{$f}) {
             log_error ("Skipping invalid format key \"$f\"\n");
             next;
         }

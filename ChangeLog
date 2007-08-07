@@ -7,6 +7,15 @@
 	* sqlog : Don't read ~/.sqlog. This file is reserved for future 
 	  user configuration.
 
+	* sqlog : Parse ~/.sqlog for specification of alternate format
+	  lists via "format{name} = LIST..." and default limit with
+	  "limit = N". Similarly, new format lists may be specific in
+	  sqlog.conf by creating a %FORMATS hash. User and system
+	  configs may override the default format key lists for
+	  "short", "long", and "freeform".
+
+	* sqlog.1 : Document ~/.sqlog.
+
 2007-08-06 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog.spec : Add perl-DateManip and gendersllnl to Requires.
