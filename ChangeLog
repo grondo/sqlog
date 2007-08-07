@@ -16,6 +16,8 @@
 
 	* sqlog.1 : Document ~/.sqlog.
 
+	* : tag v0.4.
+
 2007-08-06 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog.spec : Add perl-DateManip and gendersllnl to Requires.

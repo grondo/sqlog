@@ -1,3 +1,14 @@
+Version 0.4 (2007-08-07):
+ - Fix for broken processing of -s, --states.
+ - Sort keys are now applied in "ORDER BY" statement of database query.
+ - New format keys "longstart" and "longend" for including year in output.
+ - longstart/end are displayed by default in "long" and "freeform" output types.
+ - Add support for user configuration in ~/.sqlog. 
+ - When sorting start and end time, assume "NONE" is the max date & time.
+ - Add string [More results available...] if more results may be in database.
+ - Added manpage for sqlog-db-util(8).
+ - Manpage and --usage output cleanup.
+
 Version 0.3 (2007-08-04):
  - Enable auto-creation of database from slurm-joblog script. 
  - Add --info option to sqlog-db-util.
