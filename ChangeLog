@@ -4,6 +4,9 @@
 	  table in create_db(). Create SLURM DB with "IF NOT EXISTS" to 
 	  avoid error.
 
+	* sqlog : Don't read ~/.sqlog. This file is reserved for future 
+	  user configuration.
+
 2007-08-06 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog.spec : Add perl-DateManip and gendersllnl to Requires.

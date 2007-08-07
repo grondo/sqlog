@@ -321,7 +321,7 @@ sub conf_init
 
 sub read_config
 {
-    for my $f ("/etc/slurm/sqlog.conf", "$ENV{HOME}/.sqlog") {
+    for my $f ("/etc/slurm/sqlog.conf") {
         unless (my $rc = do $f) {
             log_fatal ("Couldn't parse $f: $@\n") if $@;
             next unless defined $rc;
