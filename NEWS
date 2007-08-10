@@ -1,3 +1,8 @@
+Version 0.6 (2007-08-10):
+ - Fix for bug in --end-before and --end-after argument processing.
+ - Add new format keys: runtime_s (runtime in seconds) and unixstart/
+   unixend (start and end times in seconds since the epoch).
+
 Version 0.5 (2007-08-10):
  - Allow perl path (default = /usr/bin/perl) and
    confdir (default = /etc/slurm) to be overridden at RPM 
