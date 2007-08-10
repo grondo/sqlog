@@ -1,3 +1,9 @@
+2007-08-10 Adam Moody <moody20@llnl.gov>
+
+	* sqlog : Fixed bug in parse_end_time preventing --end-before
+	  and --end-after from working.  Fixed comment in parse_start_time
+	  to print --start-before and --start-after in error message.
+
 2007-08-10 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog, sqlog-db-util, slurm-joblog.pl, sqlog.spec :

@@ -696,7 +696,7 @@ sub parse_start_time
 {
     my ($time, $min, $max) = @_;
 
-    log_fatal ("Do not specify --start with either --minstart or --maxstart.\n")
+    log_fatal ("Do not specify --start with either --start-before or --start-after.\n")
        if ($time && ($min || $max));
 
     $conf{starttime}{min} = parse_datetime ($min) if ($min);
@@ -713,7 +713,7 @@ sub parse_end_time
 
     $conf{endtime}{min} = parse_datetime ($min) if ($min);
     $conf{endtime}{max} = parse_datetime ($max) if ($max); 
-    $conf{endtime} = parse_minmax_time ($time);
+    $conf{endtime} = parse_minmax_time ($time) if ($time);
 }
 
 sub parse_runtime
@@ -821,6 +821,9 @@ sub format_runtime
     int $hrs && return sprintf (      "%d:%2.2d:%2.2d", $hrs, $min, $sec);
     int $min && return sprintf (            "%d:%2.2d", $min, $sec);
     return sprintf             (              ":%2.2d", $sec);
+
+    # TODO: would like to add this as an option to simplify script processing of sqlog output
+    return sprintf             (              "%d", $t); # return runtime in raw seconds
 }
 
 sub format_create
