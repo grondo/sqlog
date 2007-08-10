@@ -1,3 +1,7 @@
+2007-08-10 Mark Grondona <mgrondona@llnl.gov>
+
+	* sqlog : Add runtime_s output field (runtime in seconds).
+
 2007-08-10 Adam Moody <moody20@llnl.gov>
 
 	* sqlog : Fixed bug in parse_end_time preventing --end-before

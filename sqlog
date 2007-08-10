@@ -165,6 +165,7 @@ $conf{fmt_spec}{short} = {
     "partition" => { "name" => "PART",     "ch" => ">", "l" => 5 },
     "start"     => { "name" => "START",    "ch" => ">", "l" =>13 },
     "runtime"   => { "name" => "TIME",     "ch" => ">", "l" => 9 },
+    "runtime_s" => { "name" => "TIME(s)",  "ch" => ">", "l" => 9 },
     "nnodes"    => { "name" => "N",        "ch" => ">", "l" => 3 },
     "nodes"     => { "name" => "NODELIST", "ch" => "*", "l" => 1 },
     "end"       => { "name" => "END",      "ch" => ">", "l" =>13 },
@@ -180,6 +181,7 @@ $conf{fmt_spec}{long} = {
     "partition" => { "name" => "PARTITION","ch" => ">", "l" => 8 },
     "start"     => { "name" => "START",    "ch" => ">", "l" =>13 },
     "runtime"   => { "name" => "TIME",     "ch" => ">", "l" => 8 },
+    "runtime_s" => { "name" => "TIME(s)",  "ch" => ">", "l" => 8 },
     "nnodes"    => { "name" => "NODES",    "ch" => ">", "l" => 4 },
     "nodes"     => { "name" => "NODELIST", "ch" => "*", "l" => 1 },
     "end"       => { "name" => "END",      "ch" => ">", "l" =>13 },
@@ -195,6 +197,7 @@ $conf{fmt_spec}{freeform} = {
     "partition" => { "name" => "PARTITION","ch" => "*", "l" => 1 },
     "start"     => { "name" => "START",    "ch" => "*", "l" => 1 },
     "runtime"   => { "name" => "TIME",     "ch" => "*", "l" => 1 },
+    "runtime_s" => { "name" => "TIME(s)",  "ch" => "*", "l" => 1 },
     "nnodes"    => { "name" => "NODES",    "ch" => "*", "l" => 1 },
     "nodes"     => { "name" => "NODELIST", "ch" => "*", "l" => 1 },
     "end"       => { "name" => "END",      "ch" => "*", "l" => 1 },
@@ -821,9 +824,6 @@ sub format_runtime
     int $hrs && return sprintf (      "%d:%2.2d:%2.2d", $hrs, $min, $sec);
     int $min && return sprintf (            "%d:%2.2d", $min, $sec);
     return sprintf             (              ":%2.2d", $sec);
-
-    # TODO: would like to add this as an option to simplify script processing of sqlog output
-    return sprintf             (              "%d", $t); # return runtime in raw seconds
 }
 
 sub format_create
@@ -984,6 +984,9 @@ sub reformat_results
             $$r{longstart} =~ s#^(\d+)/(\d+)-#$year-$1-$2T#;
         }
 
+
+        #  Save runtime in seconds in case user wants to print that
+        $$r{runtime_s} = $$r{runtime};
         $$r{runtime} = format_runtime ($$r{runtime});
 
         # Alternate state name
