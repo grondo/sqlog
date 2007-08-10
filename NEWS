@@ -1,3 +1,8 @@
+Version 0.5 (2007-08-10):
+ - Allow perl path (default = /usr/bin/perl) and
+   confdir (default = /etc/slurm) to be overridden at RPM 
+   build time via _slurm_confidir and _perl_path.
+
 Version 0.4 (2007-08-07):
  - Fix for broken processing of -s, --states.
  - Sort keys are now applied in "ORDER BY" statement of database query.

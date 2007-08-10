@@ -4,6 +4,8 @@
 	  Allow configuration directory (/etc/slurm by default) and perl
 	  path (/usr/bin/perl by default) to be overridden at RPM build time.
 
+	* : tag 0.5.
+
 2007-08-07 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog-db-util : Failsafe check for existence of slurm_job_log
