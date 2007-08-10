@@ -170,7 +170,9 @@ $conf{fmt_spec}{short} = {
     "nodes"     => { "name" => "NODELIST", "ch" => "*", "l" => 1 },
     "end"       => { "name" => "END",      "ch" => ">", "l" =>13 },
     "longstart" => { "name" => "START",    "ch" => ">", "l" =>18 },
-    "longend"   => { "name" => "END",      "ch" => ">", "l" =>18 }
+    "longend"   => { "name" => "END",      "ch" => ">", "l" =>18 },
+    "unixstart" => { "name" => "START",    "ch" => ">", "l" =>12 },
+    "unixend"   => { "name" => "END",      "ch" => ">", "l" =>12 }
     };
 
 $conf{fmt_spec}{long} = {
@@ -186,7 +188,9 @@ $conf{fmt_spec}{long} = {
     "nodes"     => { "name" => "NODELIST", "ch" => "*", "l" => 1 },
     "end"       => { "name" => "END",      "ch" => ">", "l" =>13 },
     "longstart" => { "name" => "START",    "ch" => ">", "l" =>18 },
-    "longend"   => { "name" => "END",      "ch" => ">", "l" =>18 }
+    "longend"   => { "name" => "END",      "ch" => ">", "l" =>18 },
+    "unixstart" => { "name" => "START",    "ch" => ">", "l" =>12 },
+    "unixend"   => { "name" => "END",      "ch" => ">", "l" =>12 }
    };
 
 $conf{fmt_spec}{freeform} = {
@@ -202,7 +206,9 @@ $conf{fmt_spec}{freeform} = {
     "nodes"     => { "name" => "NODELIST", "ch" => "*", "l" => 1 },
     "end"       => { "name" => "END",      "ch" => "*", "l" => 1 },
     "longstart" => { "name" => "START",    "ch" => "*", "l" => 1 },
-    "longend"   => { "name" => "END",      "ch" => "*", "l" => 1 }
+    "longend"   => { "name" => "END",      "ch" => "*", "l" => 1 },
+    "unixstart" => { "name" => "START",    "ch" => "*", "l" => 1 },
+    "unixend"   => { "name" => "END",      "ch" => "*", "l" => 1 }
    };
 
 # Default format
@@ -212,7 +218,7 @@ $conf{fmt_spec}{freeform} = {
 #
 $conf{fmt_spec}{aliases} = {
         "jid" => "jobid", "part" => "partition", "st" => "state",
-        "time" => "runtime", "N" => "nnodes" };
+        "time" => "runtime", "time_s" => "runtime_s", "N" => "nnodes" };
 
 
 #############################################################################
@@ -956,6 +962,7 @@ sub sort_by_start
 #
 # DB routines
 #
+
 sub reformat_results
 {
     my (@rows) = @_;
@@ -966,7 +973,9 @@ sub reformat_results
         # Drop year for shorter start and end times.
         #  Save year for possible inclusion in output.
         $$r{longend} = $$r{end};
+        $$r{unixend} = UnixDate ($$r{end}, "%s");
         $$r{longstart} = $$r{start};
+        $$r{unixstart} = UnixDate ($$r{start}, "%s");
 
         $$r{end} =~ s#^(\d+)-(\d+)-(\d+) #$2/$3-#;
         $$r{start} =~ s#^(\d+)-(\d+)-(\d+) #$2/$3-#;

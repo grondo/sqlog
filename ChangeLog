@@ -2,6 +2,10 @@
 
 	* sqlog : Add runtime_s output field (runtime in seconds).
 
+	* sqlog : Add unixstart and unixend format keys for start and
+	  end times in seconds since the epoch. Also, add an alias
+	  time_s for runtime_s.
+
 2007-08-10 Adam Moody <moody20@llnl.gov>
 
 	* sqlog : Fixed bug in parse_end_time preventing --end-before
