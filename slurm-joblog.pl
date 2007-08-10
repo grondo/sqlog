@@ -38,6 +38,7 @@ $conf{sqluser} = "slurm";
 $conf{sqlpass} = "";
 $conf{sqlhost} = "sqlhost";
 $conf{stmt}    = qq(INSERT INTO slurm_job_log VALUES (?,?,?,?,?,?,?,?,?,?,?,?));
+$conf{confdir} = "/etc/slurm";
 
 #
 #  Autocreate slurm_job_log DB if it doesn't exist?
@@ -99,8 +100,8 @@ sub log_fatal
 
 sub read_config
 {
-    my $ro = "/etc/slurm/sqlog.conf";
-    my $rw = "/etc/slurm/slurm-joblog.conf";
+    my $ro = "$conf{confdir}/sqlog.conf";
+    my $rw = "$conf{confdir}/slurm-joblog.conf";
 
     # First read sqlog config to get SQLHOST and SQLDB
     #  (ignore SQLUSER)

@@ -16,6 +16,8 @@ Requires: slurm perl-DateManip gendersllnl
 sqlog provides a system for creation, query, and population of a 
 database of SLURM job history. 
 
+%{!?_slurm_sysconfdir: %define _slurm_sysconfdir %{_sysconfdir}/slurm}
+%{!?_perl_path: %define _perl_path /usr/bin/perl}
 
 %prep 
 %setup
@@ -27,6 +29,20 @@ database of SLURM job history.
 rm -rf "$RPM_BUILD_ROOT"
 mkdir -p "$RPM_BUILD_ROOT"
 mkdir -p -m0755 $RPM_BUILD_ROOT/%{_libexecdir}/sqlog
+
+subst()
+{
+	FILE=$1
+	CONFDIR=%{_slurm_sysconfdir}
+	PERL=%{_perl_path}
+	perl -ple "s|/usr/bin/perl|$PERL|; s|/etc/slurm|$CONFDIR|;" $FILE \
+		  > $FILE.tmp
+	mv $FILE.tmp $FILE
+}
+
+for f in sqlog sqlog-db-util slurm-joblog.pl; do
+    subst $f
+done
 
 install -D -m 755 sqlog  ${RPM_BUILD_ROOT}/%{_bindir}/sqlog
 install -D -m 644 sqlog.1 ${RPM_BUILD_ROOT}/%{_mandir}/man1/sqlog.1

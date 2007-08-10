@@ -111,6 +111,7 @@ $conf{db}         = "slurm";
 $conf{sqluser}    = "slurm_read";
 $conf{sqlpass}    = "";
 $conf{sqlhost}    = "sqlhost";  
+$conf{confdir}    = "/etc/slurm";
 
 #  Default max number of rows to fetch:
 $conf{limit}      = 25;
@@ -359,7 +360,7 @@ sub read_user_config
 
 sub read_config
 {
-    for my $f ("/etc/slurm/sqlog.conf") {
+    for my $f ("$conf{confdir}/sqlog.conf") {
         unless (my $rc = do $f) {
             log_fatal ("Couldn't parse $f: $@\n") if $@;
             next unless defined $rc;

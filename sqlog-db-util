@@ -80,6 +80,7 @@ if ($conf{help}) {
 #############################
 
 # Config Defaults
+$conf{confdir}     = "/etc/slurm";
 $conf{db}          = "slurm";
 $conf{sqlhost}     = "sqlhost";
 $conf{ro}{sqluser} = "slurm_read";
@@ -184,8 +185,8 @@ sub slurm_job_log_table_exists
 
 sub read_config 
 {
-    my $ro = "/etc/slurm/sqlog.conf";
-    my $rw = "/etc/slurm/slurm-joblog.conf";
+    my $ro = "$conf{confdir}/sqlog.conf";
+    my $rw = "$conf{confdir}/slurm-joblog.conf";
 
     # First read sqlog config to get SQLHOST and SQLDB
     #  (ignore SQLUSER/SQLPASS)
