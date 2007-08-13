@@ -13,10 +13,14 @@
 #
 require 5.005;
 use strict;
+use lib qw();	# Required for _perl_libpaths RPM option
 use DBI;
 use File::Basename;
 use POSIX qw(strftime);
 use Hostlist qw(expand);
+
+# Required for _path_env_var RPM option
+$ENV{PATH} = '/bin:/usr/bin:/usr/sbin';
 
 my $prog = basename $0;
 
@@ -151,7 +155,7 @@ sub create_db
         return (0);
     }
 
-    my $cmd = "/usr/sbin/sqlog-db-util --create";
+    my $cmd = "sqlog-db-util --create";
     system ($cmd);
     if ($?>>8) {
         log_error ("'$cmd' exited with exit code ", $?>>8, "\n");

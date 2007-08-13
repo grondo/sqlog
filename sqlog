@@ -10,11 +10,15 @@
 #
 #############################################################################
 use strict;
+use lib qw();	# Required for _perl_libpaths RPM option
 use DBI;
 use File::Basename;
 use Getopt::Long qw/ :config gnu_getopt ignore_case /;
 use Hostlist qw/ expand compress intersect /;
 use Date::Manip;
+
+# Required for _path_env_var RPM option
+$ENV{PATH} = '/bin:/usr/bin:/usr/sbin';
 
 my $progname = basename $0;
 my %conf;

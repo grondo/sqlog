@@ -3,6 +3,7 @@
 # $Id$
 #
 use strict;
+use lib qw();	# Required for _perl_libpaths RPM option
 use DBI;
 use Digest::SHA1 qw/ sha1_hex /;
 use Getopt::Long qw/ :config gnu_getopt ignore_case /;
@@ -17,6 +18,9 @@ use File::Basename;
 # logfiles.
 #
 # Adam Moody <moody20@llnl.gov>
+
+# Required for _path_env_var RPM option
+$ENV{PATH} = '/bin:/usr/bin:/usr/sbin';
 
 my %conf = ();
 

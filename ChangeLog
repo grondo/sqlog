@@ -1,3 +1,13 @@
+2007-08-13 Pythagoras Watson <py@llnl.gov>
+
+	* sqlog, sqlog-db-util, slurm-joblog.pl, sqlog.spec :
+	  Fixes required for AIX and other installations without 
+	  prefix = /usr: Allow modification of perl include paths
+	  and PATH at RPM build time, use __perl RPM macro instead
+	  of hardcoding /usr/bin/perl in specfile, correct perms
+	  of sql-db-util.8 man page, and improve subst() functon in
+	  specfile.
+
 2007-08-10 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog : Add runtime_s output field (runtime in seconds).
