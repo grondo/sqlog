@@ -1,3 +1,7 @@
+2007-08-13 Mark Grondona <mgorndona@llnl.gov>
+
+	* : tag v0.7.
+
 2007-08-13 Pythagoras Watson <py@llnl.gov>
 
 	* sqlog, sqlog-db-util, slurm-joblog.pl, sqlog.spec :
