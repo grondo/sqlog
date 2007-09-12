@@ -67,7 +67,7 @@ get_slurm_vars ();
 my $success = append_job_db ();
 
 #  Append to text file.if requested or DB failed.
-if ($conf{logfile} || !$success) {
+if ($conf{joblogfile} || !$success) {
     append_joblog ();
 }
 

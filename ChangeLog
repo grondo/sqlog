@@ -1,3 +1,8 @@
+2007-09-12 Mark Grondona <mgorndona@llnl.gov>
+
+	* slurm-joblog.pl : Fix test for whether a job logfile is
+	  configured.
+
 2007-08-13 Mark Grondona <mgorndona@llnl.gov>
 
 	* : tag v0.7.
