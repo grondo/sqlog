@@ -1,3 +1,7 @@
+Version 0.8 (2007-09-27):
+ - Add more packages to RPM Requires
+ - Fix test for whether job logfile is configured in slurm-joblog.pl.
+
 Version 0.7 (2007-08-13):
  - Applied Py Watson's fixes for non-standard installs:
   -- Allow perl library path and PATH to be specified at RPM build time.
