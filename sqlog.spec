@@ -8,7 +8,7 @@ License:   GPL
 Source:    %{name}-%{version}.tgz
 BuildRoot: %{_tmppath}/%{name}-%{version}
 BuildArch: noarch
-Requires: slurm perl-DateManip gendersllnl
+Requires: slurm perl-DateManip perl-DBI perl-DBD-MySQL perl-Digest-SHA1 gendersllnl
 
 %define debug_package %{nil}
 

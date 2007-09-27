@@ -1,3 +1,7 @@
+2007-09-14 Pythagoras Watson <py@llnl.gov>
+
+	* sqlog.spec : Add more packages to Requires.
+
 2007-09-12 Mark Grondona <mgorndona@llnl.gov>
 
 	* slurm-joblog.pl : Fix test for whether a job logfile is
