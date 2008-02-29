@@ -1,5 +1,7 @@
 2008-02-29 Mark Grondona <mgrondona@llnl.gov>
 
+	* : tag v0.9.
+
 	* sqlog.1 : Add JOB STATE CODES section to manpage explaining
 	  the various job states and their abbreviations.
 

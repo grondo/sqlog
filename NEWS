@@ -1,3 +1,8 @@
+Version 0.9 (2008-02-29):
+ - Fix --format=long which wasn't properly setting long format.
+ - Add "JOB STATE CODES" section to sqlog(1) man page describing the
+   various job state abbreviations.
+
 Version 0.8 (2007-09-27):
  - Add more packages to RPM Requires
  - Fix test for whether job logfile is configured in slurm-joblog.pl.
