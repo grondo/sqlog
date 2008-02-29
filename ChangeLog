@@ -1,5 +1,8 @@
 2008-02-29 Mark Grondona <mgrondona@llnl.gov>
 
+	* sqlog.1 : Add JOB STATE CODES section to manpage explaining
+	  the various job states and their abbreviations.
+
 	* sqlog : Fix -o, --format when just a new format specification
 	  is provided (e.g. "long" or "freeform").
 

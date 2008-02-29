@@ -266,6 +266,40 @@ all previous types. This also implies that a user can redefine
 the default \fBsqlog\fR format types \fIshort\fR, \fIlong\fR,
 and \fIfreeform\fR, though this is not recommended.
 
+.SH JOB STATE CODES
+In normal output, job states are displayed with two letter abbreviations
+in \fBsqlog\fR output. Job state codes are fully explained in the
+\fBsqueue\fR(1) man page, but the abbreviations are restated here
+for completeness.
+.TP 20 
+.B "CA   CANCELLED"
+Job was cancelled.
+.TP
+.B "CD   COMPLETED"
+Job completed normally.
+.TP
+.B "CG   COMPLETING"
+Job is in the process of completing.
+.TP
+.B "F    FAILED"
+Job termined abnormally.
+.TP
+.B "NF   NODE_FAIL"
+Job terminated due to node failure.
+.TP
+.B "PD   PENDING"
+Job is pending allocation.
+.TP 
+.B "R    RUNNING"
+Job currently has an allocation.
+.TP
+.B "S    SUSPENDED"
+Job is suspended.
+.TP 
+.B "TO   TIMEOUT"
+Job terminated upon reaching its time limit.
+
+
 .SH EXAMPLES
 Display the job or jobs that were running on host55 at July 19, 4:00PM:
 .nf
