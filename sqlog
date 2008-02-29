@@ -516,7 +516,7 @@ sub list_valid_states
     print STDERR "$progname: Valid state keys: ";
 
     for my $st (sort keys %{$conf{state_names}}) {
-        push @keys, join ('|', ($st, @{$conf{state_names}{$st}}));
+        push @keys, join ('|', map {uc} ($st, @{$conf{state_names}{$st}}));
     }
 
     print STDERR join ', ', @keys;
@@ -618,7 +618,8 @@ sub set_format_list
     #
     if ((scalar @{$conf{userfmt}} == 1)
        && (grep { $conf{userfmt}[0] eq $_ } keys %{$conf{format_list}}) ) {
-        my $fmt = $conf{format_list}{$conf{userfmt}[0]};
+        $conf{formattype} = $conf{userfmt}[0];
+        my $fmt = $conf{format_list}{$conf{formattype}};
         @{$conf{userfmt}} = split_format ($fmt);
     } 
 

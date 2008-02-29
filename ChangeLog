@@ -1,3 +1,8 @@
+2008-02-29 Mark Grondona <mgrondona@llnl.gov>
+
+	* sqlog : Fix -o, --format when just a new format specification
+	  is provided (e.g. "long" or "freeform").
+
 2007-09-27 Mark Grondona <mgrondona@llnl.gov>
 
 	* : tag v0.8.
