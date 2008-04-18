@@ -792,10 +792,23 @@ sub format_minmax_string
 sub duration_to_seconds
 {
     my ($t) = @_;
-    my ($d, $h, $m, $s) = 
-       # XXX: This regex needs improvement (allows time to start with '-')
-       ($t =~ /^(\d*?)[dD:-]?(\d*?)[hH:]?(\d*?)[mM:]?(\d*)[sS]?$/) 
-       or return undef;
+    my ($d, $h, $m, $s);
+
+    #
+    #  list of valid regexes to check in order.
+    #  1. DD-HH:MM:SS type 
+    #  2. 1hr20min or 1h20m type
+    #
+    my @regexes = qw/
+      ^(?:(\d+)(?:-))?(\d*?):?(\d*?):(\d+)$
+      ^(\d*?)(?i:d|days?)?(\d*?)(?i:hr?)?(\d*?)(?i:m|min)?(\d*)(?i:s||sec)?$
+      NOTFOUND
+      /;
+
+    for my $re (@regexes) {
+        return undef if ($re eq "NOTFOUND");
+        last if (($d, $h, $m, $s) = ($t =~ /$re/)) 
+    }
 
     log_debug ("duration_to_seconds ($t): d=$d h=$h m=$m s=$s\n");
 
