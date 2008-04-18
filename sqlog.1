@@ -172,7 +172,8 @@ Do not display header rows in output.
 .BI "-o, --format " LIST
 Specify a list of format keys to display or a format type, or both
 using the form \fITYPE\fR:\fIKEYS\fR... Use \fB--format\fR=list to
-list valid keys and types.
+list valid keys and types. See OUTPUT FORMAT below for further 
+information.
 .TP
 .BI "-P, --sort " LIST
 Specify a list of keys on which to sort output. Prepend a '-' to sort
@@ -266,6 +267,105 @@ all previous types. This also implies that a user can redefine
 the default \fBsqlog\fR format types \fIshort\fR, \fIlong\fR,
 and \fIfreeform\fR, though this is not recommended.
 
+.SH OUTPUT FORMAT
+By default, \fBsqlog\fR uses the output format 
+.nf
+
+   short:jobid,partition,name,user,state,start,runtime,nnodes,nodes
+
+.fi
+
+The \fIshort:\fR preceeding the format specification tells \fBsqlog\fR
+to use the \fIshort\fR form of each of the format keys. The result
+is what you see when running \fBsqlog\fR without using the -o,--format
+option. All format keys currently available are detailed here. Some
+keys have shorter aliases that are provided for convenience. These
+are listed alongside the full key name below. Note that all these
+keys can also be listed by using --\fIformat=list\fR.
+.TP 20
+.B "jobid | jid"
+The SLURM jobid for this job.
+.TP
+.B "partition | part"
+The SLURM partition in which the job ran or is running.
+.TP 
+.B "name"
+The name of the job as recorded by SLURM.
+.TP
+.B "user"
+The username of the user running the job.
+.TP 
+.B "state | st"
+The current or final state of the job. See JOB STATE CODES
+for a description of the two-letter codes that this field
+displays by default.
+.TP 
+.B "start"
+The start time of the job in the form MM/DD-HH:MM:SS.
+.TP 
+.B "runtime | time"
+The total runtime of the job in the form
+DD-HH:MM:SS. Leading zero values may be dropped,
+for instance 4:30 is 4 minutes 30 seconds.
+.TP 
+.B "nnodes | N"
+The number of nodes allocated to the job.
+.TP 
+.B "nodes"
+The nodelist that was allocated to the job. Note that for
+completing jobs (CG) this nodelist will be restricted to
+the currently completing nodes for the job. To see the
+full nodelist, restrict \fBsqlog\fR to the database only,
+i.e. run with the -X, --no-running option.
+.TP 
+.B "runtime_s | time_s"
+The total job runtime in seconds.
+.TP 
+.B "end"
+The time at which the job completed in the form
+MM/DD-HH:MM:SS.
+.TP
+.B "longstart"
+Date and time the job started in the form
+YYYY-MM-DDTHH:MM:SS. This is displayed by
+default in the \fIlong\fR format type.
+.TP 
+.B "longend"
+Date and time the job ended in the form
+YYYY-MM-DDTHH:MM:SS. This is displayed by
+default in the \fIlong\fR format type.
+.TP 
+.B "unixstart"
+Job start time in seconds since epoch.
+.TP 
+.B "unixend"
+Job end time in seconds since epoch.
+.TP 0
+
+A format type may be specified in addition to the format
+fields. These change the output width and in some cases
+the output format of the fields above. The format
+type may also be specified alone to the \fI--format\fR
+option. For instance \fI--format=long\fR would choose the
+default fields configured for the \fIlong\fR format type.
+
+.TP 20
+.B "short"
+This is the default output type. It uses the format fields:
+jobid,part,name,user,state,start,runtime,nnodes,nodes
+.TP
+.B "long"
+This format type uses longer widths for most fields, and
+displays the the full job state code by default (e.g.
+completing instead of CG). Its default format fields are:
+jobid,part,name,user,state,longstart,longend,runtime,nnodes,nodes
+.TP
+.B "freeform"
+This is a freeform output in which full width fields are displayed
+separated by whitespace. This would be used for parsing sqlog
+output for instance, to guarantee no field is trunctated.
+It uses the same format fields as the \fBlong\fR format type.
+
 .SH JOB STATE CODES
 In normal output, job states are displayed with two letter abbreviations
 in \fBsqlog\fR output. Job state codes are fully explained in the
@@ -317,7 +417,7 @@ Display all jobs that failed between 8:00AM and 9:00AM this morning,
 sorted by descending endtime:
 .nf
 
-    sqlog --all --end=8am--9am --states=F --sort=-end
+    sqlog --all --end=8am..9am --states=F --sort=-end
 
 .fi 
 Display all jobs that started today:
@@ -330,14 +430,14 @@ Display all jobs that have run between 3 and 4 hours on the nodes
 host30 through host65, and that didn't complete normally
 .nf
 
-   sqlog -L 0 -T=3h-4h -n 'host[30-65]' -xs completed
+   sqlog -L 0 -T=3h..4h -n 'host[30-65]' -xs completed
 
 .fi  
 Display all jobs that were running yesterday with 1000 nodes or 
 greater and completed normally:
 .nf
 
-    sqlog -t yesterday,12am--12am -s CD -N +1000
+    sqlog -t yesterday,12am..12am -s CD -N +1000
 
 .fi
 List current queue, sorted by number of nodes (ascending):
