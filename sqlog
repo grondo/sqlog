@@ -810,7 +810,12 @@ sub duration_to_seconds
         last if (($d, $h, $m, $s) = ($t =~ /$re/)) 
     }
 
-    log_debug ("duration_to_seconds ($t): d=$d h=$h m=$m s=$s\n");
+    log_debug ("duration_to_seconds ($t):",
+               " d=", $d||0,
+               " h=", $h||0,
+               " m=", $m||0,
+               " s=", $s||0,
+               "\n");
 
     return (($s||0) + ($m||0) * 60 + ($h||0) * 3600 + ($d||0) * 3600 * 24);
 }
