@@ -1,3 +1,7 @@
+Version 0.10 (2008-04-18):
+ - Add OUTPUT FORMAT section to sqlog(1) manpage.
+ - Improve RUNTIME parsing in sqlog script.
+
 Version 0.9 (2008-02-29):
  - Fix --format=long which wasn't properly setting long format.
  - Add "JOB STATE CODES" section to sqlog(1) man page describing the

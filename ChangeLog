@@ -1,5 +1,7 @@
 2008-04-18 Mark Grondona <mgrondona@llnl.gov>
 
+	* : tag v0.10.
+
 	* sqlog.1 : Add OUTPUT FORMAT section.
 
 	* sqlog : Separate regexes in duration_to_seconds for 
