@@ -1,3 +1,8 @@
+Version 0.11 (2008-06-24):
+ - New slurm-joblog.conf parameter $SQLNETWORK sets the network
+   on which read access to database is allowed. Default = 192.168.%.%.
+ - sqlog-db-util now deletes slurm* users from mysql DB before 
+
 Version 0.10 (2008-04-18):
  - Add OUTPUT FORMAT section to sqlog(1) manpage.
  - Improve RUNTIME parsing in sqlog script.

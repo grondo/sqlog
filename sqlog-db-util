@@ -36,13 +36,13 @@ Create SLURM job completion log database along with user accounts to
 access it, and/or backfill the database from SLURM job completion
 logfiles.
 
-    -h, --help      Display this message.
-    -v, --verbose   Be verbose.
-    -d, --drop      Drop existing table.
-    -c, --create    Create slurm database, slurm & slurm_read users, and table.
-    -i, --info      Print information about current DB.
-    -b, --backfill  Backfill database from SLURM joblog files in ARGV.
-    -L, --localhost Connect to DB over localhost instead of configured SQL host.
+    -h, --help        Display this message.
+    -v, --verbose     Be verbose.
+    -d, --drop        Drop existing table.
+    -c, --create      Create slurm database, slurm & slurm_read users, and table.
+    -i, --info        Print information about current DB.
+    -b, --backfill    Backfill database from SLURM joblog files in ARGV.
+    -L, --localhost   Connect to DB over localhost instead of configured SQL host.
 
 EOF
 ;
@@ -92,6 +92,7 @@ $conf{ro}{sqlpass} = "";
 
 $conf{rw}{sqluser} = "slurm";
 $conf{rw}{sqlpass} = "";
+$conf{rw}{sqlnetwork} = "192.168.%.%";
 
 read_config ();
 
@@ -204,6 +205,7 @@ sub read_config
     $conf{ro}{sqluser} = $conf::SQLUSER if (defined $conf::SQLUSER);
     $conf{ro}{sqlpass} = $conf::SQLPASS if (defined $conf::SQLPASS);
 
+
     undef $conf::SQLUSER;
     undef $conf::SQLPASS;
 
@@ -217,6 +219,7 @@ sub read_config
     $conf{rw}{sqluser}    = $conf::SQLUSER     if (defined $conf::SQLUSER);
     $conf{rw}{sqlpass}    = $conf::SQLPASS     if (defined $conf::SQLPASS);
     $conf{rw}{rootpass}   = $conf::SQLROOTPASS if (defined $conf::SQLROOTPASS);
+    $conf{rw}{sqlnetwork} = $conf::SQLNETWORK  if (defined $conf::SQLNETWORK);
 
     @{$conf{rw}{hosts}} = @conf::SQLRWHOSTS if (defined @conf::SQLRWHOSTS);
 
@@ -256,18 +259,24 @@ sub create_db
     # Switch to management databases
     do_sql($dbh, "USE mysql;");
 
+    log_verbose ("Dropping previous slurm joblog db users and privileges.\n");
+    drop_slurm_users ($dbh);
+
     # set up permissions for different users of slurm database
     for my $host (@{$conf{rw}{hosts}}, "localhost") {
-        log_verbose ("Granting rw privileges to $conf{rw}{sqluser} on $host\n");
+        my $user = $conf{rw}{sqluser};
+        log_verbose ("Granting rw privileges to $user on $host\n");
         do_sql ($dbh, 
                 "GRANT ALL ON $conf{db}.* TO" .
-                " '$conf{rw}{sqluser}'\@'$host'" .
+                " '$user'\@'$host'" .
                 " IDENTIFIED BY '$conf{rw}{sqlpass}'"); 
     }
-    log_verbose ("Granting readonly privs to $conf{ro}{sqluser} on 192.168.\n");
+
+    log_verbose ("Granting readonly privs to $conf{ro}{sqluser} " .
+                 "on $conf{rw}{sqlnetwork}.\n");
     do_sql ($dbh, 
-            "GRANT SELECT ON $conf{db}.* TO"   .
-            " $conf{ro}{sqluser}\@'192.168.%.%'" .
+            "GRANT SELECT ON $conf{db}.* TO" .
+            " $conf{ro}{sqluser}\@'$conf{rw}{sqlnetwork}'" .
             " IDENTIFIED BY ''");
 
     # flush privileges to make our changes current
@@ -297,6 +306,25 @@ sub show_info
     print "Job count: $count\n";
     
     return;
+}
+
+sub drop_slurm_users
+{
+    my $dbh = shift @_;
+    my $stmt = "SELECT user,host from mysql.user;";
+    my @oldusers = ();
+
+    my $sth = $dbh->prepare ($stmt) or return;
+    $sth->execute () or return;
+
+    while ((my $a = $sth->fetchrow_arrayref)) {
+        if ($a->[0] ne "$conf{ro}{sqluser}"  &&
+            $a->[0] ne "$conf{rw}{sqluser}" ) {
+                next;
+        }
+        push (@oldusers, "$a->[0]\@'$a->[1]'");
+    }
+    do_sql ($dbh, "DROP USER " . join (", ", @oldusers)) if @oldusers;
 }
 
 # given a dbh and list of slurm job completion logfiles, insert them into the dbh

@@ -1,3 +1,16 @@
+2008-06-24 Mark Grondona <mgrondona@llnl.gov>
+
+	* sqlog-db-util :
+	  Drop all slurm* users from mysql DB before adding new
+	  user privileges to avoid leaving old settings around.
+
+	* sqlog-db-util :
+	  New slurm-joblog.conf parameter SQLNETWORK to specify the network 
+	  on which read-only access to the DB is allowed. Default: 192.168.%.%.
+
+	* slurm-joblog.conf.example :
+	  Describe SQLNETWORK parameter.
+
 2008-04-18 Mark Grondona <mgrondona@llnl.gov>
 
 	* : tag v0.10.

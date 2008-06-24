@@ -11,12 +11,14 @@
 #   SQLROOTPASS : Root password (Needed for DB creation)
 #   JOBLOGFILE  : Location of joblog file (empty if you don't want a logfile) 
 #   SQLRWHOSTS  : Array of all hosts from which to allow RW user access.
+#   SQLNETWORK  : Restricted network for db  (default = 192.168.%.%)
 #
 package conf;
 use Genders;
 
 $SQLUSER = "slurm";
 $SQLPASS = "MyReadWritePassword";
+$SQLNETWORK = "192.168.%.%";
 
 # Root password needed for creation of SLURM tables
 $SQLROOTPASS = "MyRootPassword";
