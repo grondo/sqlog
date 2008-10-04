@@ -8,7 +8,7 @@ License:   GPL
 Source:    %{name}-%{version}.tgz
 BuildRoot: %{_tmppath}/%{name}-%{version}
 BuildArch: noarch
-Requires: slurm perl-DateManip perl-DBI perl-DBD-MySQL perl-Digest-SHA1 gendersllnl
+Requires: slurm perl(Date::Manip) perl(DBI) perl(DBD::mysql) perl(Digest::SHA1) gendersllnl
 
 %define debug_package %{nil}
 
@@ -56,3 +56,4 @@ rm -rf "$RPM_BUILD_ROOT"
 %{_sbindir}/sqlog-db-util
 %{_mandir}/*/*
 %{_libexecdir}/sqlog
+

@@ -1,3 +1,9 @@
+2008-10-03 Py Watson <py@llnl.gov>
+
+	* sqlog.spec :
+	  Change the various perl Requires to be based on the module 
+	  name rather than the RPM name. Fix for RPM Requires on SLES 9.
+
 2008-06-24 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog-db-util :
