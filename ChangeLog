@@ -1,3 +1,11 @@
+2008-12-02 Mark Grondona <mgrondona@llnl.gov>
+
+	* sqlog : It appears that Date::Manip is buggy and doesn't
+	  support DST properly. sqlog used Date::Manip to convert
+	  between stored database dates and Unix time (seconds since
+	  epoch). Instead convert time using other methods in this
+	  instance to avoid misconverting during DST conversions.
+	  
 2008-10-03 Py Watson <py@llnl.gov>
 
 	* sqlog.spec :
