@@ -1,3 +1,11 @@
+Version 0.12 (2008-12-03):
+ - Do not use Date::Manip routines to convert dates to "Unix time"
+   (seconds since epoch) Date::Manip doesn't handle daylight savings 
+   transitions properly and instead uses the current DST offset.
+ - New --regex option allows sqlog to query with regexes for jobids,
+   user names, states, paritions, and job names, instead of a simple
+   exact match.
+
 Version 0.11 (2008-06-24):
  - New slurm-joblog.conf parameter $SQLNETWORK sets the network
    on which read access to database is allowed. Default = 192.168.%.%.

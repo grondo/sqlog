@@ -1,5 +1,7 @@
 2008-12-03 Mark Grondona <mgrondona@llnl.gov>
 
+	* : tag v0.12.
+
 	* sqlog : Add --regex option to use REGEXP instead of IN
 	  for queries of jobid, username, jobstate, partition, or
 	  job name.
@@ -19,6 +21,8 @@
 	  name rather than the RPM name. Fix for RPM Requires on SLES 9.
 
 2008-06-24 Mark Grondona <mgrondona@llnl.gov>
+
+	* : tag v0.11.
 
 	* sqlog-db-util :
 	  Drop all slurm* users from mysql DB before adding new
