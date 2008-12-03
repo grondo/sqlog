@@ -1,3 +1,9 @@
+2008-12-03 Mark Grondona <mgrondona@llnl.gov>
+
+	* sqlog : Add --regex option to use REGEXP instead of IN
+	  for queries of jobid, username, jobstate, partition, or
+	  job name.
+
 2008-12-02 Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog : It appears that Date::Manip is buggy and doesn't

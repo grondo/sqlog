@@ -82,6 +82,15 @@ Provide a comma-separated list of users to include (or exclude if
 preceded by the \fI-x\fR, \fI--exclude\fR option). This option may
 be specified multiple times.
 .TP
+.BI "--regex"
+Enable regular expressions instead of exact matching for jobids, job
+names, partitions, states, and user names. For example
+.nf
+
+     sqlog --regex --job-names='^foo-.*'
+
+.fi
+.TP
 .BI "-x, --exclude"
 Exclude the following list of jobids, users, partitions, nodes, job names,
 or job states. For example: \fB--exclude --jobids\fR=\fILIST\fR or 

@@ -41,6 +41,8 @@ current queue of running jobs.
                               Use '--states=list' to list valid state names.
     -u, --users=LIST...      Comma-separated list of users.
 
+        --regex              Enable regular expression matching for the above.
+
     -x, --exclude            Exclude the following list of jobids, users, 
                               states, partitions, or nodes.
 
@@ -413,6 +415,7 @@ sub parse_cmdline
         "no-header|H"    => \$conf{noheader},
         "verbose|v+"     => \$conf{verbose},
         "exclude|x"      => \$conf{got_exclude},
+        "regex"          => \$conf{regex},
         "limit|L=i"      => \$conf{limit},
         "no-running|X"   => \$conf{no_running},
         "no-db"          => \$conf{nodb},
@@ -1100,7 +1103,8 @@ sub stmt_list
 
     my @result = ();
 
-    my $in = $excluded ? "NOT IN" : "IN";
+    my $in = $conf{regex} ? "REGEXP": "IN";
+    my $operator = $excluded ? "NOT $in" : $in;
 
     # For all keys in %names:
     #  - Choose included or excluded list
