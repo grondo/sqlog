@@ -26,12 +26,12 @@ my $prog = basename $0;
 
 #  List of job variables provided in ENV by SLURM.
 #
-my @SLURMvars = qw(JOBID UID JOBNAME JOBSTATE PARTITION LIMIT START END NODES);
+my @SLURMvars = qw(JOBID UID JOBNAME JOBSTATE PARTITION LIMIT START END NODES PROCS);
 
 #  List of parameters (in order) to pass to SQL execute command below.
 #  
 my @params    = qw(jobid username uid jobname jobstate partition limit
-		           start end nodes nodecount);
+		           start end nodes nodecount procs);
 
 # 
 #  Set up SQL parameters
@@ -41,7 +41,7 @@ $conf{db}      = "slurm";
 $conf{sqluser} = "slurm";
 $conf{sqlpass} = "";
 $conf{sqlhost} = "sqlhost";
-$conf{stmt}    = qq(INSERT INTO slurm_job_log VALUES (?,?,?,?,?,?,?,?,?,?,?,?));
+$conf{stmt}    = qq(INSERT INTO slurm_job_log VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?));
 $conf{confdir} = "/etc/slurm";
 
 #

@@ -1,3 +1,10 @@
+Version 0.13 (2009-03-03):
+ - Add procs column to track number of processors allocated to each
+   job, which is useful for machines like yana and hopi.
+ - Extend nodelist column to fix truncation when very fragmented
+   nodelists exceeded the 1024 char limit initially set for the field.
+ - Add --numcores, --mincores, --maxcores options to sqlog.
+
 Version 0.12 (2008-12-03):
  - Do not use Date::Manip routines to convert dates to "Unix time"
    (seconds since epoch) Date::Manip doesn't handle daylight savings 

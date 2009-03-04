@@ -51,6 +51,11 @@ current queue of running jobs.
         --minnodes=N         Explicitly specify the minimum number of nodes.
         --maxnodes=N         Explicitly specify the maximum number of nodes.
 
+    -C, --ncores=N           List all jobs that ran on N cores. N may be 
+                              specified using the RANGE syntax described below.
+        --mincores=N         Explicitly specify the minimum number of cores.
+        --maxcores=N         Explicitly specify the maximum number of cores.
+
     -T, --runtime=DURATION   List jobs that ran for DURATION, e.g., '4:30:00' or
                               '4h30m'. RANGE operators apply.
         --mintime=DURATION   Explicitly specify the minimum runtime.
@@ -127,7 +132,7 @@ $conf{formattype} = "short";
 
 #  Valid sort keys:
 @{$conf{dbnames}} = qw/ id jobid user uid name state partition limit 
-                        start end nodes nnodes runtime /;
+                        start end nodes nnodes ncores runtime /;
 #  Default sort keys:
 @{$conf{sortkeys}} = qw/ start /;
 
@@ -137,7 +142,7 @@ $conf{formattype} = "short";
                        "state" => "jobstate", "partition" => "partition",
                        "limit" => "timelimit", "start" => "starttime",
                        "end" => "endtime", "nodes" => "nodelist",
-                       "nnodes" => "nodecount", "runtime" => "runtime" );
+                       "nnodes" => "nodecount", "ncores" => "procs", "runtime" => "runtime" );
 
 #  Array for results:
 @{$conf{results}}= ();
@@ -172,6 +177,7 @@ $conf{fmt_spec}{short} = {
     "start"     => { "name" => "START",    "ch" => ">", "l" =>13 },
     "runtime"   => { "name" => "TIME",     "ch" => ">", "l" => 9 },
     "runtime_s" => { "name" => "TIME(s)",  "ch" => ">", "l" => 9 },
+    "ncores"    => { "name" => "C",        "ch" => ">", "l" => 5 },
     "nnodes"    => { "name" => "N",        "ch" => ">", "l" => 3 },
     "nodes"     => { "name" => "NODELIST", "ch" => "*", "l" => 1 },
     "end"       => { "name" => "END",      "ch" => ">", "l" =>13 },
@@ -190,6 +196,7 @@ $conf{fmt_spec}{long} = {
     "start"     => { "name" => "START",    "ch" => ">", "l" =>13 },
     "runtime"   => { "name" => "TIME",     "ch" => ">", "l" => 8 },
     "runtime_s" => { "name" => "TIME(s)",  "ch" => ">", "l" => 8 },
+    "ncores"    => { "name" => "CORES",    "ch" => ">", "l" => 6 },
     "nnodes"    => { "name" => "NODES",    "ch" => ">", "l" => 4 },
     "nodes"     => { "name" => "NODELIST", "ch" => "*", "l" => 1 },
     "end"       => { "name" => "END",      "ch" => ">", "l" =>13 },
@@ -208,6 +215,7 @@ $conf{fmt_spec}{freeform} = {
     "start"     => { "name" => "START",    "ch" => "*", "l" => 1 },
     "runtime"   => { "name" => "TIME",     "ch" => "*", "l" => 1 },
     "runtime_s" => { "name" => "TIME(s)",  "ch" => "*", "l" => 1 },
+    "ncores"    => { "name" => "CORES",    "ch" => "*", "l" => 1 },
     "nnodes"    => { "name" => "NODES",    "ch" => "*", "l" => 1 },
     "nodes"     => { "name" => "NODELIST", "ch" => "*", "l" => 1 },
     "end"       => { "name" => "END",      "ch" => "*", "l" => 1 },
@@ -224,7 +232,7 @@ $conf{fmt_spec}{freeform} = {
 #
 $conf{fmt_spec}{aliases} = {
         "jid" => "jobid", "part" => "partition", "st" => "state",
-        "time" => "runtime", "time_s" => "runtime_s", "N" => "nnodes" };
+        "time" => "runtime", "time_s" => "runtime_s", "N" => "nnodes", "C" => "ncores" };
 
 
 #############################################################################
@@ -329,6 +337,9 @@ sub conf_init
     $conf{numnodes}               = -1;
     $conf{minnodes}               = -1;
     $conf{maxnodes}               = -1;
+    $conf{numcores}               = -1;
+    $conf{mincores}               = -1;
+    $conf{maxcores}               = -1;
     $conf{runtime}                = -1;
     $conf{mintime}                = -1;
     $conf{maxtime}                = -1;
@@ -444,9 +455,14 @@ sub parse_cmdline
         "sort|P=s"       => sub { @sortkeys = split(/,/, $_[1]); },
         "before|B=s"     => sub { set_time ("before", $_[1]); },
         "after|A=s"      => sub { set_time ("after",  $_[1]); },
-        "nnodes|N=s"     => sub { set_nnodes ($_[1]);   },
-        "minnodes=s"     => sub { set_nnodes ("+$_[1]") },
-        "maxnodes=s"     => sub { set_nnodes ("-$_[1]") },
+
+        "nnodes|N=s"     => sub { set_count ("nodes", $_[1]);   },
+        "minnodes=s"     => sub { set_count ("nodes", "+$_[1]") },
+        "maxnodes=s"     => sub { set_count ("nodes", "-$_[1]") },
+
+        "ncores|C=s"     => sub { set_count ("cores", $_[1]);   },
+        "mincores=s"     => sub { set_count ("cores", "+$_[1]") },
+        "maxcores=s"     => sub { set_count ("cores", "-$_[1]") },
         );
 
     usage () if $conf{help} || !$rc;
@@ -639,25 +655,26 @@ sub set_format_list
     return 1;
 }
 
-sub set_nnodes
+sub set_count
 {
-    my ($nnodes) = @_;
+    my $field = shift @_;
+    my ($num) = @_;
 
-    if ($nnodes =~ s/^\+(\d+)$/$1/) {
-        $conf{minnodes} = $nnodes;
+    if ($num =~ s/^\+(\d+)$/$1/) {
+        $conf{"min$field"} = $num;
     } 
-    elsif ($nnodes =~ s/^-(\d+)/$1/) {
-        $conf{maxnodes} = $nnodes;
+    elsif ($num =~ s/^-(\d+)/$1/) {
+        $conf{"max$field"} = $num;
     }
-    elsif ($nnodes =~ /^(\d+)\.\.(\d+)$/) {
-        $conf{minnodes} = $1;
-        $conf{maxnodes} = $2;
+    elsif ($num =~ /^(\d+)\.\.(\d+)$/) {
+        $conf{"min$field"} = $1;
+        $conf{"max$field"} = $2;
     }
-    elsif ($nnodes =~ /^\d+$/)  {
-        $conf{numnodes} = $nnodes;
+    elsif ($num =~ /^\d+$/)  {
+        $conf{"num$field"} = $num;
     }
     else {
-        log_fatal ("--nnodes: Invalid argument: $nnodes\n");
+        log_fatal ("--n$field: Invalid argument: $num\n");
     }
 }
 
@@ -962,6 +979,7 @@ sub sort_state   { return $$a{state} cmp $$b{state} };
 sub sort_partition { return $$a{partition} cmp $$b{partition} };
 sub sort_nodes   { return $$a{nodes} cmp $$b{nodes} };
 sub sort_nnodes  { return $$a{nnodes} <=> $$b{nnodes} };
+sub sort_ncores  { return $$a{ncores} <=> $$b{ncores} };
 
 sub sort_by_keys
 {
@@ -1055,7 +1073,7 @@ sub run_query
     log_verbose ("Success.\n");
 
     my @names = qw/ id jobid user uid name state partition limit start end 
-                    nodes nnodes runtime /;
+                    nodes nnodes ncores runtime /;
 
     my $count = 0;
     while (my @vals = $sth->fetchrow_array ()) {
@@ -1191,6 +1209,16 @@ sub compose_query
         push @stmts, "nodecount <= " . $dbh->quote($conf{maxnodes});
     }
 
+    if ($conf{numcores} >= 0) { 
+        push @stmts, "procs = "  . $dbh->quote($conf{numcores});
+    }
+    if ($conf{mincores} >= 0) { 
+        push @stmts, "procs >= " . $dbh->quote($conf{mincores});
+    }
+    if ($conf{maxcores} >= 0) { 
+        push @stmts, "procs <= " . $dbh->quote($conf{maxcores});
+    }
+
     if ($conf{runtime} >= 0) { 
         push @have, "runtime = "  . $dbh->quote($conf{runtime});
     }
@@ -1305,9 +1333,9 @@ sub excluded_by_time_window
 sub query_running_jobs
 {
     my @names = qw/ jobid user uid name state partition limit start end 
-                        nodes nnodes runtime /;
+                        nodes nnodes ncores runtime /;
 
-    my $sfmt = "%i::%u::%U::%j::%T::%P::%l::%S::%e::%N::%D::%M";
+    my $sfmt = "%i::%u::%U::%j::%T::%P::%l::%S::%e::%N::%D::%C::%M";
 
     my $cmd = "squeue -h -t running,completing -o $sfmt";
 
@@ -1325,6 +1353,10 @@ sub query_running_jobs
         next if (($conf{numnodes} >= 0) && !($r{nnodes} == $conf{numnodes}) );
         next if (($conf{minnodes} >= 0) && !($r{nnodes} >= $conf{minnodes}) );
         next if (($conf{maxnodes} >= 0) && !($r{nnodes} <= $conf{maxnodes}) );
+
+        next if (($conf{numcores} >= 0) && !($r{ncores} == $conf{numcores}) );
+        next if (($conf{mincores} >= 0) && !($r{ncores} >= $conf{mincores}) );
+        next if (($conf{maxcores} >= 0) && !($r{ncores} <= $conf{maxcores}) );
 
         next if (($conf{runtime} >= 0)  && !($r{runtime} == $conf{runtime}) );
         next if (($conf{mintime} >= 0)  && !($r{runtime} >= $conf{mintime}) );

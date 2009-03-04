@@ -40,6 +40,7 @@ logfiles.
     -v, --verbose     Be verbose.
     -d, --drop        Drop existing table.
     -c, --create      Create slurm database, slurm & slurm_read users, and table.
+    -x, --convert     Convert slurm_job_log table to version 2 (add procs and extend nodelist columns).
     -i, --info        Print information about current DB.
     -b, --backfill    Backfill database from SLURM joblog files in ARGV.
     -L, --localhost   Connect to DB over localhost instead of configured SQL host.
@@ -55,6 +56,7 @@ sub usage { print STDERR $conf{usage}; exit 0; }
 # set defaults and read in command-line options
 $conf{backfill} = "";
 $conf{create}   = 0;
+$conf{convert}  = 0;
 $conf{drop}     = 0;
 $conf{localhost}= 0;
 $conf{verbose}  = 0;
@@ -64,14 +66,15 @@ GetOptions (
    "help|h"         => \$conf{help},
    "backfill|b"     => \$conf{backfill},
    "create|c"       => \$conf{create},
+   "convert|x"      => \$conf{convert},
    "drop|d"         => \$conf{drop},
    "localhost|L"    => \$conf{localhost},
    "info|i"         => \$conf{info},
    "verbose|v+"     => \$conf{verbose},
 ) or usage ();
 
-if (!$conf{create} && !$conf{drop} && !$conf{backfill} && !$conf{info}) {
-    log_error ("Specify at least one of --{create,drop,backfill,info}\n");
+if (!$conf{create} !$conf{convert} && !$conf{drop} && !$conf{backfill} && !$conf{info}) {
+    log_error ("Specify at least one of --{create,convert,drop,backfill,info}\n");
     usage ();
 }
 
@@ -126,6 +129,16 @@ elsif ($conf{create} && !$dbh) {
     # try to connect again
     $dbh = connect_db_rw() 
         or log_fatal ("Failed to connect to SLURM DB after create!\n");
+}
+
+# convert slurm_job_log table to version 2 (add procs and extend nodelist columns)
+if ($conf{convert}) {
+    # attempt to convert table to version 2, if conversion fails, print an error
+    # if the table has already been converted, a message is printed and no action is taken
+    if (!slurm_job_log_table_convert_to_v2 ()) {
+        log_fatal ("convert: SLURM job log table failed conversion.\n");
+    }
+    return;
 }
 
 # optionally backfill from logfiles
@@ -185,6 +198,38 @@ sub slurm_job_log_table_exists
 {
     my $dbh = connect_db_rw () or return 0;
     $dbh->do ("DESCRIBE $conf{db}.slurm_job_log;") or return 0;
+    return 1;
+}
+
+sub slurm_job_log_table_convert_to_v2
+{
+    my $dbh = connect_db_rw () or return 0;
+
+    # first check that the procs column is not already defined
+    my $sql = "DESCRIBE $conf{db}.slurm_job_log;";
+print "$sql\n";
+    my $sth = $dbh->prepare ($sql) or return 0;
+    $sth->execute () or return 0;
+    while ((my $a = $sth->fetchrow_arrayref)) {
+        if ($a->[0] eq "procs") {
+            log_msg ("convert: SLURM job log table has already been converted.\n");
+            return 1;
+        }
+    }
+
+    # didn't find procs (would have returned already if we did)
+
+    # extend nodelist column and add procs column
+#    $sql = "ALTER TABLE $conf{db}.slurm_job_log CHANGE `nodelist` `nodelist` VARCHAR(4096) NOT NULL, ADD `procs` INT(10) NOT NULL;";
+    $sql = "ALTER TABLE $conf{db}.slurm_job_log MODIFY `nodelist` BLOB NULL, ADD `procs` INT(10) NULL AFTER `nodecount`;";
+print "$sql\n";
+#    $dbh->do ($sql) or return 0;
+
+    # since we changed the schema regarding varchar columns, let MySQL optimize it again (don't know whether this is necessary)
+    $sql = "OPTIMIZE TABLE $conf{db}.slurm_job_log;";
+print "$sql\n";
+#    $dbh->do ($sql) or return 0;
+
     return 1;
 }
 
@@ -409,6 +454,9 @@ sub create_slurm_joblog_table {
 
     do_sql ($dbh, "USE $conf{db};"); 
 
+    # nodelist can be null since some jobs are canceled before ever being assigned resources
+    # procs can be null since this data was not captured in the first version of the table;
+    # we don't want 0's in fields which should have non-zero values (jobs that actually ran)
     my $sql = "CREATE TABLE slurm_job_log (
         id        int(10)   NOT NULL AUTO_INCREMENT,
         jobid     int(10)   NOT NULL,
@@ -420,8 +468,9 @@ sub create_slurm_joblog_table {
         timelimit int(10)   NOT NULL,
         starttime datetime  NOT NULL,
         endtime   datetime  NOT NULL,
-        nodelist  varchar(1024) NOT NULL,
+        nodelist  blob          NULL,
         nodecount int(10)   NOT NULL,
+        procs     int(10)       NULL,
         PRIMARY KEY (id),
         UNIQUE INDEX jobid (jobid,starttime),
         INDEX username (username)
