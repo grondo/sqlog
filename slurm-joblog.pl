@@ -41,6 +41,7 @@ $conf{db}      = "slurm";
 $conf{sqluser} = "slurm";
 $conf{sqlpass} = "";
 $conf{sqlhost} = "sqlhost";
+$conf{stmt_v1} = qq(INSERT INTO slurm_job_log VALUES (?,?,?,?,?,?,?,?,?,?,?,?));
 $conf{stmt}    = qq(INSERT INTO slurm_job_log VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?));
 $conf{confdir} = "/etc/slurm";
 
@@ -205,8 +206,22 @@ sub append_job_db
     my $sth = $dbh->prepare($conf{stmt}) 
         or log_error "prepare: ", $dbh->errstr, "\n";
 
-    $sth->execute("NULL", map {convtime_db($_)} @params) or
-        log_error "Problem inserting into slurm table: ", $dbh->errstr, "\n"; 
+    if (not $sth->execute("NULL", map {convtime_db($_)} @params)) {
+        # it could be that the database hasn't been updated yet, try the old schema
+
+        # save the error message
+        my $err_msg = $dbh->errstr;
+
+        # pop off the trailing procs value from params
+        my @params_v1 = @params;
+        pop @params_v1;
+
+        my $sth_v1 = $dbh->prepare($conf{stmt_v1}) 
+            or log_error "prepare: ", $dbh->errstr, "\n";
+
+        $sth_v1->execute("NULL", map {convtime_db($_)} @params_v1) or
+            log_error "Problem inserting into slurm table: First: $err_msg :: Second: ", $dbh->errstr, "\n"; 
+    }
 
     $dbh->disconnect;
 }
