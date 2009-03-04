@@ -244,7 +244,7 @@ sub append_joblog
 
 	printf JOBLOG "JobId=%s UserId=%s(%s) Name=%s JobState=%s Partition=%s " .
 		          "TimeLimit=%s StartTime=%s EndTime=%s NodeList=%s " .
-				  "NodeCnt=%s\n", 
+				  "NodeCnt=%s Procs=%s\n", 
         map {convtime($_)} @params;
 
 	close (JOBLOG);
