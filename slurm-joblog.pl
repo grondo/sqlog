@@ -41,8 +41,8 @@ $conf{db}      = "slurm";
 $conf{sqluser} = "slurm";
 $conf{sqlpass} = "";
 $conf{sqlhost} = "sqlhost";
-$conf{stmt_v1} = qq(INSERT INTO slurm_job_log VALUES (?,?,?,?,?,?,?,?,?,?,?,?));
-$conf{stmt}    = qq(INSERT INTO slurm_job_log VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?));
+$conf{stmt_v1} = qq(INSERT INTO slurm_job_log    VALUES (?,?,?,?,?,?,?,?,?,?,?,?));
+$conf{stmt_v2} = qq(INSERT INTO `jobs` VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?));
 $conf{confdir} = "/etc/slurm";
 
 #
@@ -168,12 +168,256 @@ sub create_db
     return (1);
 }
 
-sub slurm_job_log_table_exists
-{
-    my ($dbh) = @_;
-    $dbh->do ("SELECT * FROM slurm_job_log LIMIT 1") || return 0;
+########################################
+# These following functions are similar to those in sqlog-db-util
+# TODO: Move these to a perl module?
+########################################
+
+# cache for name ids, saves us from hitting the database over and over at the cost of more memory
+# not really needed in this case (insert of a single job), but this way, the functions are the same as sqlog-db-util
+my %IDcache = ();
+%{$IDcache{nodes}} = ();
+
+# execute (do) sql statement on dbh
+sub do_sql {
+    my ($dbh, $stmt) = @_;
+    if (!$dbh->do ($stmt)) {
+      log_error ("SQL failed: $stmt\n");
+      return 0;
+    }
     return 1;
 }
+
+# returns 1 if table exists, 0 otherwise
+sub table_exists
+{
+    my $dbh   = shift @_;
+    my $table = shift @_;
+    $dbh->do ("DESCRIBE `$conf{db}`.`$table`;") or return 0;
+    return 1;
+}
+
+# return the auto increment value for the last inserted record
+sub get_last_insert_id
+{
+    my $dbh = shift @_;
+    my $sql = "SELECT LAST_INSERT_ID();";
+    my $sth = $dbh->prepare($sql);
+    $sth->execute();
+    my ($id) = $sth->fetchrow_array();
+}
+
+# given a table and name, read id for name from table and add to id cache if found
+sub read_id
+{
+    my $dbh   = shift @_;
+    my $table = shift @_;
+    my $name  = shift @_;
+
+    my $id = undef;
+    if (not defined $IDcache{$table}) { %{$IDcache{$table}} = (); }
+    if (not defined $IDcache{$table}{$name}) {
+        my $q_name = $dbh->quote($name);
+        my $sql = "SELECT * FROM `$table` WHERE `name` = $q_name;";
+        my $sth = $dbh->prepare($sql);
+        if ($sth->execute ()) {
+            my ($table_id, $table_name) = $sth->fetchrow_array ();
+            if (defined $table_id and defined $table_name) {
+                $IDcache{$table}{$name} = $table_id;
+                $id = $table_id;
+            }
+        }
+    } else {
+        $id = $IDcache{$table}{$name};
+    }
+
+    return $id;
+}
+
+# insert name into table if it does not exist, and return its id
+sub read_write_id
+{
+    my $dbh   = shift @_;
+    my $table = shift @_;
+    my $name  = shift @_;
+
+    # attempt to read the id first, if not found, insert it and return the last insert id
+    my $id = read_id($dbh, $table, $name);
+    if (not defined $id) {
+        my $q_name = $dbh->quote($name);
+        my $sql = "INSERT IGNORE INTO `$table` (`id`,`name`) VALUES (NULL,$q_name);";
+        my $sth = $dbh->prepare($sql);
+        if ($sth->execute ()) {
+            $id = get_last_insert_id($dbh);
+            $IDcache{$table}{$name} = $id;
+        }
+    }
+
+    return $id;
+}
+
+# given a reference to a list of nodes, read their ids from the nodes table and add them to the id cache
+sub read_node_ids
+{
+    my $dbh       = shift @_;
+    my $nodes_ref = shift @_;
+
+    # build list of nodes not in our cache
+    my @missing_nodes = ();
+    foreach my $node (@$nodes_ref) {
+        if (not defined $IDcache{nodes}{$node}) { push @missing_nodes, $node; }
+    }
+
+    # if any missing nodes, try to look up their values
+    if (@missing_nodes > 0) {
+        my @q_nodes = map $dbh->quote($_), @missing_nodes;
+        my $in_nodes = join(",", @q_nodes);
+        my $sql = "SELECT * FROM `nodes` WHERE `name` IN ($in_nodes);";
+        my $sth = $dbh->prepare($sql);
+        if ($sth->execute ()) {
+            while (my ($table_id, $table_name) = $sth->fetchrow_array ()) {
+                $IDcache{nodes}{$table_name} = $table_id;
+            }
+        }
+    }
+
+    return;
+}
+
+# given a reference to a list of nodes, insert them into the nodes table and add their ids to the id cache
+sub read_write_node_ids
+{
+    my $dbh       = shift @_;
+    my $nodes_ref = shift @_;
+
+    # read node_ids for these nodes into our cache
+    read_node_ids($dbh, $nodes_ref);
+
+    # if still missing nodes, we need to insert them
+    my @missing_nodes = ();
+    foreach my $node (@$nodes_ref) {
+        if (not defined $IDcache{nodes}{$node}) { push @missing_nodes, $node; }
+    }
+    if (@missing_nodes > 0) {
+        my @q_nodes = map $dbh->quote($_), @missing_nodes;
+        my $values = join("),(", @q_nodes);
+        my $sql = "INSERT IGNORE INTO `nodes` (`name`) VALUES ($values);";
+        do_sql($dbh, $sql);
+
+        # fetch ids for just inserted nodes
+        read_node_ids($dbh, $nodes_ref);
+    }
+
+    return;
+}
+
+# given a job_id and a nodelist, insert jobs_nodes records for each node used in job_id
+sub insert_job_nodes
+{
+    my $dbh      = shift @_;
+    my $job_id   = shift @_;
+    my $nodelist = shift @_;
+
+    if (defined $job_id and defined $nodelist and $nodelist ne "") {
+        my $q_job_id = $dbh->quote($job_id);
+
+        # clean up potentially bad nodelist
+        if ($nodelist =~ /\[/ and $nodelist !~ /\]/) {
+            # found an opening bracket, but no closing bracket, nodelist is probably incomplete
+            # chop back to last ',' or '-' and replace with a ']'
+            $nodelist =~ s/[,-]\d+$/\]/;
+        }
+
+        # get our nodeset
+        my @nodes = Hostlist::expand($nodelist);
+
+        # this will fill our node_id cache
+        read_write_node_ids($dbh, \@nodes);
+
+        # get the node_id for each node
+        my @values = ();
+        foreach my $node (@nodes) {
+            if (defined $IDcache{nodes}{$node}) {
+                my $q_node_id = $dbh->quote($IDcache{nodes}{$node});
+                push @values, "($q_job_id,$q_node_id)";
+            }
+        }
+
+        # if we have any nodes for this job, insert them
+        if (@values > 0) {
+            my $sql = "INSERT IGNORE INTO `jobs_nodes` (`job_id`,`node_id`) VALUES " . join(",", @values) . ";";
+            do_sql($dbh, $sql);
+        }
+    }
+}
+
+# compute time since epoch, attempt to account for DST changes via timelocal
+sub get_seconds_date_manip_is_buggy
+{
+    my ($date) = @_;
+    use Time::Local;
+
+    my $S = UnixDate ($date, "%S");
+    my $M = UnixDate ($date, "%M");
+    my $H = UnixDate ($date, "%H");
+
+    my $d = UnixDate ($date, "%e");
+    my $m = UnixDate ($date, "%m") - 1;
+    my $y = UnixDate ($date, "%Y") - 1900;
+
+    return timelocal ($S, $M, $H, $d, $m, $y);
+}
+
+# given hash of values, create mysql values string for insert statement
+sub value_string_v2
+{
+    my $dbh = shift @_;
+    my $h   = shift @_;
+
+    # given start and end times, compute the number of seconds the job ran for
+    # TODO: unsure whether this correctly handles jobs that straddle DST changes
+    my $seconds = 0;
+    if (defined $h->{StartTime} and $h->{StartTime} !~ /^\s+$/ and
+        defined $h->{EndTime}   and $h->{EndTime}   !~ /^\s+$/)
+    {
+         my $start = get_seconds_date_manip_is_buggy($h->{StartTime});
+         my $end   = get_seconds_date_manip_is_buggy($h->{EndTime});
+         $seconds = $end - $start;
+         if ($seconds < 0) { $seconds = 0; }
+    }
+
+    # if procs is not set, but ppn is specified and nodecount is set, compute procs
+    # (assumes all processors on the node were allocated to the job, only use for clusters
+    # which use whole-node allocation)
+#    if (not defined $h->{Procs} and defined $conf{ppn} and defined $h->{NodeCnt}) {
+#      $h->{Procs} = $h->{NodeCnt} * $conf{ppn};
+#    }
+
+    # insert the field values, order matters
+    my @parts = ();
+    push @parts, (defined $h->{Id}) ? $dbh->quote($h->{Id}) : "NULL";
+    push @parts, $dbh->quote($h->{JobId});
+    push @parts, $dbh->quote(read_write_id($dbh, "usernames",  $h->{UserName}));
+    push @parts, $dbh->quote($h->{UserNumb});
+    push @parts, $dbh->quote(read_write_id($dbh, "jobnames",   $h->{Name}));
+    push @parts, $dbh->quote(read_write_id($dbh, "jobstates",  $h->{JobState}));
+    push @parts, $dbh->quote(read_write_id($dbh, "partitions", $h->{Partition}));
+    push @parts, $dbh->quote($h->{TimeLimit});
+    push @parts, $dbh->quote($h->{StartTime});
+    push @parts, $dbh->quote($h->{EndTime});
+    push @parts, $dbh->quote($seconds);
+    push @parts, $dbh->quote($h->{NodeList});
+    push @parts, $dbh->quote($h->{NodeCnt});
+    push @parts, (defined $h->{Procs}) ? $dbh->quote($h->{Procs}) : "NULL";
+
+    # finally, return the ('field1','field2',...) string
+    return "(" . join(',', @parts) . ")";
+}
+
+########################################
+# The above functions are similar to those in sqlog-db-util
+# TODO: Move these to a perl module?
+########################################
 
 #
 #  Append data to SLURM job log (database)
@@ -197,33 +441,59 @@ sub append_job_db
             or return (0);
     }
 
-    # Check for slurm_job_log table
-    if (!slurm_job_log_table_exists ($dbh)) {
+    # Check for tables, if not found, try to create them
+    if (not table_exists ($dbh, "jobs") and not table_exists ($dbh, "slurm_job_log")) {
         log_msg ("SLURM job log table doesn't exist in DB. Creating.\n");
         create_db () or return (0);
     }
 
-    my $sth = $dbh->prepare($conf{stmt}) 
-        or log_error "prepare: ", $dbh->errstr, "\n";
+    # if we have schema 2 use it
+    # otherwise, try schema 1
+    # if neither is found, just print an error
+    if (table_exists ($dbh, "jobs")) {
+        # value_string_v2 expects certain field names, so convert conf
+        my %h = ();
+        $h{JobId}     = $conf{jobid};
+        $h{UserName}  = $conf{username};
+        $h{UserNumb}  = $conf{uid};
+        $h{Name}      = $conf{jobname};
+        $h{JobState}  = $conf{jobstate};
+        $h{Partition} = $conf{partition};
+        $h{TimeLimit} = $conf{limit};
+        $h{StartTime} = convert_db("start");
+        $h{EndTime}   = convert_db("end");
+        $h{NodeList}  = $conf{nodes};
+        $h{NodeCnt}   = $conf{nodecount};
+        $h{Procs}     = $conf{procs};
 
-    if (not $sth->execute("NULL", map {convtime_db($_)} @params)) {
-        # it could be that the database hasn't been updated yet, try the old schema
+        # convert hash to VALUES
+        $value_string = value_string_v2 ($dbh, \%h);
 
-        # save the error message
-        my $err_msg = $dbh->errstr;
-
-        # pop off the trailing procs value from params
+        # insert into v2 schema
+        my $sql = "INSERT INTO `jobs` VALUES $value_string;";
+        if (not do_sql ($dbh, $sql)) {
+            log_error "Problem inserting into slurm table: $sql: error: ", $dbh->errstr, "\n"; 
+            return 0;
+        }
+    } elsif (table_exists ($dbh, "slurm_job_log")) {
+        # insert into v1 schema
         my @params_v1 = @params;
         pop @params_v1;
 
         my $sth_v1 = $dbh->prepare($conf{stmt_v1}) 
             or log_error "prepare: ", $dbh->errstr, "\n";
 
-        $sth_v1->execute("NULL", map {convtime_db($_)} @params_v1) or
-            log_error "Problem inserting into slurm table: First: $err_msg :: Second: ", $dbh->errstr, "\n"; 
+        if (not $sth_v1->execute("NULL", map {convtime_db($_)} @params_v1)) {
+            log_error "Problem inserting into slurm table: ", $dbh->errstr, "\n"; 
+            return 0;
+        }
+    } else {
+        log_error "No tables found to insert record into\n"; 
+        return 0;
     }
 
     $dbh->disconnect;
+    return 1;
 }
 
 sub convtime_db

@@ -275,7 +275,11 @@ parse_cmdline ();
 $conf{dbh}  = dbh_init ();
 
 #  Compose a query based on options:
-$conf{stmt} = compose_query ($conf{dbh}) 
+$conf{stmt_v1} = compose_query (1, $conf{dbh}) 
+                or log_fatal ("Failed to generate query\n");
+
+#  Compose a query based on options:
+$conf{stmt_v2} = compose_query (2, $conf{dbh}) 
                 or log_fatal ("Failed to generate query\n");
 
 log_verbose ("Running query: \"$conf{stmt}\"\n");
@@ -287,7 +291,10 @@ exit 0 if ($conf{dry_run});
 query_running_jobs () unless ($conf{no_running});
 
 #  Execute DB query and grab results:
-run_query () unless ($conf{nodb});
+run_query (1, $conf{stmt_v1}) unless ($conf{nodb});
+
+#  Execute DB query and grab results:
+run_query (2, $conf{stmt_v2}) unless ($conf{nodb});
 
 #  Sort by requested keys
 log_verbose ("sorting by keys @{$conf{sortkeys}}\n");
@@ -1067,20 +1074,38 @@ sub reformat_results
 
 sub run_query
 {
-    my $sth = $conf{dbh}->prepare ($conf{stmt});
+    my $version = shift @_;
+    my $stmt    = shift @_;
 
-    $sth->execute () or log_fatal ("Aborting.\n");
+    my $sth = $conf{dbh}->prepare ($stmt);
+
+    if (not $sth->execute ()) {
+        # may be something fatal, or may just be that a particular table version does not exist
+        log_verbose ("Query failed: $stmt\n");
+        return;
+    }
     log_verbose ("Success.\n");
 
     my @names = qw/ id jobid user uid name state partition limit start end 
                     nodes nnodes ncores runtime /;
+    if ($version == 1) {
+        # no ncores field in record for version 1 of the schema
+        @names = qw/ id jobid user uid name state partition limit start end 
+                    nodes nnodes runtime /;
+    }
 
     my $count = 0;
     while (my @vals = $sth->fetchrow_array ()) {
         my %r = ();
         @r{@names} = @vals;
 
-        next if nodes_not_included ($r{nodes});
+        if ($version == 1) {
+          # cores were not recorded in version 1 schema
+          $r{ncores} = -1;
+
+          # and we have to do the nodename checking by hand on each record
+          next if nodes_not_included ($r{nodes});
+        }
 
         push (@{$conf{results}}, \%r);
         $count++;
@@ -1109,9 +1134,29 @@ sub quote_list
     return "(" . join (',', (map { $dbh->quote ($_) } @list)) . ")";
 }
 
+sub lookup_ids
+{
+    my $dbh   = shift @_;
+    my $table = shift @_;
+    my $in    = shift @_;
+    my $names_ref = shift @_;
+    my $ids_ref   = shift @_;
+
+    # set ids to an empty list to begin
+    @$ids_ref = ();
+
+    # lookup matching names from table and insert ids
+    my $sql = "SELECT * FROM `$table` WHERE `name` $in " . quote_list ($dbh, @$names_ref) . ";";
+print "$sql\n";
+    my $sth = $dbh->prepare($sql);
+    if ($sth->execute()) {
+        while (my ($id, $name) = $sth->fetchrow_array ()) { push @$ids_ref, $id; }
+    }
+}
+
 sub stmt_list
 {
-    my ($dbh, $excluded) = @_;
+    my ($version, $dbh, $excluded) = @_;
     my %names = (
         "jobids"     => "jobid",
         "users"      => "username",
@@ -1124,15 +1169,54 @@ sub stmt_list
     my $in = $conf{regex} ? "REGEXP": "IN";
     my $operator = $excluded ? "NOT $in" : $in;
 
-    # For all keys in %names:
-    #  - Choose included or excluded list
-    #  - skip empty lists
-    #  - generate one list entry with "NAME (NOT) IN ( 'item', ... )"
-    #
-    for my $name (keys %names) {
-        my $list = $excluded ? \@{$conf{exclude}{$name}} : \@{$conf{$name}};
-        next unless @$list;
-        push (@result, "$names{$name} $in " . quote_list ($dbh, @$list));
+    # for version 2, we need to lookup ids for users,states,partions,and jobnames
+    if ($version > 1) {
+        my %tables = (
+            "users"      => "usernames",
+            "states"     => "jobstates",
+            "partitions" => "partitions",
+            "job_names"  => "jobnames",
+        );
+
+        foreach my $key (keys %tables) {
+            if (@{$conf{$key}}) {
+                lookup_ids ($dbh, $tables{$key}, $in, \@{$conf{$key}}, \@{$conf{include_ids}{$key}});
+            }
+            if (@{$conf{exclude}{$key}}) {
+                lookup_ids ($dbh, $tables{$key}, $in, \@{$conf{exclude}{$key}}, \@{$conf{exclude_ids}{$key}});
+            }
+        }
+#        if (@{$conf{"users"}})      { lookup_ids ($dbh, "usernames",  $in, \@{$conf{"users"}},      \@{$conf{include_ids}{"users"}}); }
+#        if (@{$conf{"states"}})     { lookup_ids ($dbh, "jobstates",  $in, \@{$conf{"states"}},     \@{$conf{include_ids}{"states"}}); }
+#        if (@{$conf{"partitions"}}) { lookup_ids ($dbh, "partitions", $in, \@{$conf{"partitions"}}, \@{$conf{include_ids}{"partitions"}}); }
+#        if (@{$conf{"job_names"}})  { lookup_ids ($dbh, "jobnames",   $in, \@{$conf{"job_names"}},  \@{$conf{include_ids}{"job_names"}}); }
+#
+#        if (@{$conf{exclude}{"users"}})      { lookup_ids ($dbh, "usernames",  $in, \@{$conf{"users"}},      \@{$conf{exclude_ids}{"users"}}); }
+#        if (@{$conf{exclude}{"states"}})     { lookup_ids ($dbh, "jobstates",  $in, \@{$conf{"states"}},     \@{$conf{exclude_ids}{"states"}}); }
+#        if (@{$conf{exclude}{"partitions"}}) { lookup_ids ($dbh, "partitions", $in, \@{$conf{"partitions"}}, \@{$conf{exclude_ids}{"partitions"}}); }
+#        if (@{$conf{exclude}{"job_names"}})  { lookup_ids ($dbh, "jobnames",   $in, \@{$conf{"job_names"}},  \@{$conf{exclude_ids}{"job_names"}}); }
+
+        # For all keys in %names:
+        #  - Choose included or excluded list
+        #  - skip empty lists
+        #  - generate one list entry with "NAME (NOT) IN ( 'item', ... )"
+        #
+        for my $name (keys %names) {
+            my $list = $excluded ? \@{$conf{exclude_ids}{$name}} : \@{$conf{include_ids}{$name}};
+            next unless @$list;
+            push (@result, "$names{$name} IN " . quote_list ($dbh, @$list));
+        }
+    } else {
+        # For all keys in %names:
+        #  - Choose included or excluded list
+        #  - skip empty lists
+        #  - generate one list entry with "NAME (NOT) IN ( 'item', ... )"
+        #
+        for my $name (keys %names) {
+            my $list = $excluded ? \@{$conf{exclude}{$name}} : \@{$conf{$name}};
+            next unless @$list;
+            push (@result, "$names{$name} $in " . quote_list ($dbh, @$list));
+        }
     }
 
     return (@result);
@@ -1140,9 +1224,14 @@ sub stmt_list
 
 sub order_by
 {
+    my $version = shift @_;
     my @s = ();
     for my $key (@{$conf{sortkeys}}) {
         my $field = $conf{sortfield}{$key};
+        if ($version == 1 and $field eq "procs") {
+            # procs field wasn't added until version 2
+            next;
+        }
         push (@s, "$field " . ($conf{sortreverse}{$key} ? "ASC" : "DESC"));
     }
 
@@ -1153,13 +1242,14 @@ sub order_by
 
 sub compose_query 
 {
+    my $version = shift @_;
     my ($dbh) = @_;
 
     #
     # Generate list of statements for included and excluded jobids, users,
     #  states, and partitions:
     #
-    my @stmts = (stmt_list ($dbh, 0), stmt_list ($dbh, 1));
+    my @stmts = (stmt_list ($version, $dbh, 0), stmt_list ($version, $dbh, 1));
     my @have = ();
 
     if ($conf{attime}{min} or $conf{attime}{max}) {
@@ -1209,39 +1299,75 @@ sub compose_query
         push @stmts, "nodecount <= " . $dbh->quote($conf{maxnodes});
     }
 
-    if ($conf{numcores} >= 0) { 
-        push @stmts, "procs = "  . $dbh->quote($conf{numcores});
-    }
-    if ($conf{mincores} >= 0) { 
-        push @stmts, "procs >= " . $dbh->quote($conf{mincores});
-    }
-    if ($conf{maxcores} >= 0) { 
-        push @stmts, "procs <= " . $dbh->quote($conf{maxcores});
-    }
-
-    if ($conf{runtime} >= 0) { 
-        push @have, "runtime = "  . $dbh->quote($conf{runtime});
-    }
-    if ($conf{mintime} >= 0) { 
-        push @have, "runtime >= " . $dbh->quote($conf{mintime});
-    }
-    if ($conf{maxtime} >= 0) { 
-        push @have, "runtime <= " . $dbh->quote($conf{maxtime});
+    # procs field wasn't added until version 2 of the schema
+    if ($version > 1) {
+        if ($conf{numcores} >= 0) { 
+            push @stmts, "procs = "  . $dbh->quote($conf{numcores});
+        }
+        if ($conf{mincores} >= 0) { 
+            push @stmts, "procs >= " . $dbh->quote($conf{mincores});
+        }
+        if ($conf{maxcores} >= 0) { 
+            push @stmts, "procs <= " . $dbh->quote($conf{maxcores});
+        }
     }
 
-    my $stmt = "SELECT *," .
+    if ($version > 1) {
+        # runtime is a real field with version 2
+        if ($conf{runtime} >= 0) { 
+            push @stmts, "runtime = "  . $dbh->quote($conf{runtime});
+        }
+        if ($conf{mintime} >= 0) { 
+            push @stmts, "runtime >= " . $dbh->quote($conf{mintime});
+        }
+        if ($conf{maxtime} >= 0) { 
+            push @stmts, "runtime <= " . $dbh->quote($conf{maxtime});
+        }
+    } else {
+        # we construct runtime dynamically for each record,
+        # so it must be in the HAVING clause in version 1
+        if ($conf{runtime} >= 0) { 
+            push @have, "runtime = "  . $dbh->quote($conf{runtime});
+        }
+        if ($conf{mintime} >= 0) { 
+            push @have, "runtime >= " . $dbh->quote($conf{mintime});
+        }
+        if ($conf{maxtime} >= 0) { 
+            push @have, "runtime <= " . $dbh->quote($conf{maxtime});
+        }
+    }
+
+    # set the table name (version dependent)
+    my $stmt = "";
+    if ($version > 1) {
+        $stmt = "SELECT" .
+                " `jobs`.*,`usernames`.`name` as `username`,`jobnames`.`name` as `jobname`,`jobstates`.`name` as `jobstate`,`partitions`.`name` as `partition`"
+                " FROM `jobs`" .
+                " LEFT JOIN `usernames`  ON `jobs`.`username_id`  = `usernames`.`id`" .
+                " LEFT JOIN `jobnames`   ON `jobs`.`jobname_id`   = `jobnames`.`id`" .
+                " LEFT JOIN `jobstates`  ON `jobs`.`jobstate_id`  = `jobstates`.`id`" .
+                " LEFT JOIN `partitions` ON `jobs`.`partition_id` = `partitions`.`id`";
+    } else {
+        $stmt = "SELECT *," .
                "UNIX_TIMESTAMP(endtime)-UNIX_TIMESTAMP(starttime) " .
-               "as runtime FROM slurm_job_log";
+               "as runtime FROM `slurm_job_log`";
+    }
 
-    $stmt .= " WHERE " . join " AND ", @stmts if (@stmts);
-    $stmt .= " HAVING " . join " AND ", @have if (@have);
-    $stmt .= order_by ();
+    $stmt .= " WHERE "  . join " AND ", @stmts if (@stmts);
+    $stmt .= " HAVING " . join " AND ", @have  if (@have);
+    $stmt .= order_by ($version);
 
     #  If there is a limit enforced, get no more results than one
     #   more than the imposed limit.
     #
-    if ($conf{limit} && !@{$conf{nodes}} && !@{$conf{exclude}{nodes}}) {
-        $stmt .= " LIMIT " . (($conf{listlimit} || $conf{limit}) + 1);
+    if ($version > 1) {
+        if ($conf{limit}) {
+            $stmt .= " LIMIT " . (($conf{listlimit} || $conf{limit}) + 1);
+        }
+    } else {
+        if ($conf{limit} && !@{$conf{nodes}} && !@{$conf{exclude}{nodes}}) {
+            $stmt .= " LIMIT " . (($conf{listlimit} || $conf{limit}) + 1);
+        }
     }
 
     return ($stmt);
