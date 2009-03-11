@@ -5,10 +5,11 @@
 # sqlog(1) database configuration
 #
 #  Override defaults for 
-#    SQLHOST   Hostname for SQL db          (default = sqlhbost)
-#    SQLUSER   Read-only username for db    (default = slurm_read)
-#    SQLPASS   Read-only password           (default = no password)
-#    SQLDB     Database name for slurm data (default = slurm)
+#    SQLHOST    Hostname for SQL db          (default = sqlhbost)
+#    SQLUSER    Read-only username for db    (default = slurm_read)
+#    SQLPASS    Read-only password           (default = no password)
+#    SQLDB      Database name for slurm data (default = slurm)
+#    TRACKNODES Set to 0 to disable per-job node tracking (default = 1)
 #  
 #  This "config file" is read by perl's do() routine, so arbitrary
 #   perl can be used. (For example, to automatically determine the

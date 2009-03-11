@@ -124,6 +124,9 @@ $conf{sqlpass}    = "";
 $conf{sqlhost}    = "sqlhost";  
 $conf{confdir}    = "/etc/slurm";
 
+# enables / disables node tracking per job in version 2 schema
+$conf{track} = 1;
+
 #  Default max number of rows to fetch:
 $conf{limit}      = 25;
 
@@ -142,7 +145,7 @@ $conf{formattype} = "short";
                        "state" => "jobstate", "partition" => "partition",
                        "limit" => "timelimit", "start" => "starttime",
                        "end" => "endtime", "nodes" => "nodelist",
-                       "nnodes" => "nodecount", "ncores" => "procs", "runtime" => "runtime" );
+                       "nnodes" => "nodecount", "ncores" => "corecount", "runtime" => "runtime" );
 
 #  Array for results:
 @{$conf{results}}= ();
@@ -156,11 +159,11 @@ $conf{formattype} = "short";
 #
 %{$conf{format_list}} = (
     "short" => 
-        "jobid,part,name,user,state,start,runtime,nnodes,nodes,",
+        "jobid,part,name,user,state,start,runtime,ncores,nnodes,nodes,",
     "long"  => 
-        "jobid,part,name,user,state,longstart,longend,runtime,nnodes,nodes",
+        "jobid,part,name,user,state,longstart,longend,runtime,ncores,nnodes,nodes",
     "freeform" => 
-        "jobid,part,name,user,state,longstart,longend,runtime,nnodes,nodes"
+        "jobid,part,name,user,state,longstart,longend,runtime,ncores,nnodes,nodes"
     );
 
 #
@@ -277,12 +280,12 @@ $conf{dbh}  = dbh_init ();
 #  Compose a query based on options:
 $conf{stmt_v1} = compose_query (1, $conf{dbh}) 
                 or log_fatal ("Failed to generate query\n");
+log_verbose ("Running query: \"$conf{stmt_v1}\"\n");
 
 #  Compose a query based on options:
 $conf{stmt_v2} = compose_query (2, $conf{dbh}) 
                 or log_fatal ("Failed to generate query\n");
-
-log_verbose ("Running query: \"$conf{stmt}\"\n");
+log_verbose ("Running query: \"$conf{stmt_v2}\"\n");
 
 #  Don't do anymore if --dry-run was specified.
 exit 0 if ($conf{dry_run});
@@ -402,6 +405,9 @@ sub read_config
         $conf{sqlhost} = $conf::SQLHOST if (defined $conf::SQLHOST);
         $conf{sqluser} = $conf::SQLUSER if (defined $conf::SQLUSER);
         $conf{db}      = $conf::SQLDB   if (defined $conf::SQLDB);
+
+        # enable / disable per job node tracking
+        $conf{track} = $conf::TRACKNODES if (defined $conf::TRACKNODES);
 
         if (defined %conf::FORMATS) {
             for my $key (keys %conf::FORMATS) {
@@ -1086,8 +1092,8 @@ sub run_query
     }
     log_verbose ("Success.\n");
 
-    my @names = qw/ id jobid user uid name state partition limit start end 
-                    nodes nnodes ncores runtime /;
+    my @names = qw/ id jobid username_id uid jobname_id jobstate_id partition_id limit start end runtime
+                    nodes nnodes ncores user name state partition /;
     if ($version == 1) {
         # no ncores field in record for version 1 of the schema
         @names = qw/ id jobid user uid name state partition limit start end 
@@ -1101,16 +1107,15 @@ sub run_query
 
         if ($version == 1) {
           # cores were not recorded in version 1 schema
-          $r{ncores} = -1;
-
-          # and we have to do the nodename checking by hand on each record
+          $r{ncores} = "";
+        }
+        if ($version == 1 or not $conf{track}) {
+          # we have to do the nodename checking by hand
           next if nodes_not_included ($r{nodes});
         }
 
         push (@{$conf{results}}, \%r);
         $count++;
-
-        #last if ($conf{limit} && ($#{$conf{results}} > $conf{limit} - 1));
     }
 
     log_verbose ("Fetched $count rows.\n");
@@ -1147,7 +1152,6 @@ sub lookup_ids
 
     # lookup matching names from table and insert ids
     my $sql = "SELECT * FROM `$table` WHERE `name` $in " . quote_list ($dbh, @$names_ref) . ";";
-print "$sql\n";
     my $sth = $dbh->prepare($sql);
     if ($sth->execute()) {
         while (my ($id, $name) = $sth->fetchrow_array ()) { push @$ids_ref, $id; }
@@ -1177,34 +1181,45 @@ sub stmt_list
             "partitions" => "partitions",
             "job_names"  => "jobnames",
         );
+        my %fields = (
+            "users"      => "username_id",
+            "states"     => "jobstate_id",
+            "partitions" => "partition_id",
+            "job_names"  => "jobname_id",
+        );
 
+        # lookup ids from name tables
         foreach my $key (keys %tables) {
-            if (@{$conf{$key}}) {
-                lookup_ids ($dbh, $tables{$key}, $in, \@{$conf{$key}}, \@{$conf{include_ids}{$key}});
-            }
-            if (@{$conf{exclude}{$key}}) {
-                lookup_ids ($dbh, $tables{$key}, $in, \@{$conf{exclude}{$key}}, \@{$conf{exclude_ids}{$key}});
+            if ($excluded) {
+                if (@{$conf{exclude}{$key}}) {
+                    lookup_ids ($dbh, $tables{$key}, $in, \@{$conf{exclude}{$key}}, \@{$conf{exclude_ids}{$key}});
+                }
+            } else {
+                if (@{$conf{$key}}) {
+                    lookup_ids ($dbh, $tables{$key}, $in, \@{$conf{$key}},          \@{$conf{include_ids}{$key}});
+                }
             }
         }
-#        if (@{$conf{"users"}})      { lookup_ids ($dbh, "usernames",  $in, \@{$conf{"users"}},      \@{$conf{include_ids}{"users"}}); }
-#        if (@{$conf{"states"}})     { lookup_ids ($dbh, "jobstates",  $in, \@{$conf{"states"}},     \@{$conf{include_ids}{"states"}}); }
-#        if (@{$conf{"partitions"}}) { lookup_ids ($dbh, "partitions", $in, \@{$conf{"partitions"}}, \@{$conf{include_ids}{"partitions"}}); }
-#        if (@{$conf{"job_names"}})  { lookup_ids ($dbh, "jobnames",   $in, \@{$conf{"job_names"}},  \@{$conf{include_ids}{"job_names"}}); }
-#
-#        if (@{$conf{exclude}{"users"}})      { lookup_ids ($dbh, "usernames",  $in, \@{$conf{"users"}},      \@{$conf{exclude_ids}{"users"}}); }
-#        if (@{$conf{exclude}{"states"}})     { lookup_ids ($dbh, "jobstates",  $in, \@{$conf{"states"}},     \@{$conf{exclude_ids}{"states"}}); }
-#        if (@{$conf{exclude}{"partitions"}}) { lookup_ids ($dbh, "partitions", $in, \@{$conf{"partitions"}}, \@{$conf{exclude_ids}{"partitions"}}); }
-#        if (@{$conf{exclude}{"job_names"}})  { lookup_ids ($dbh, "jobnames",   $in, \@{$conf{"job_names"}},  \@{$conf{exclude_ids}{"job_names"}}); }
 
-        # For all keys in %names:
-        #  - Choose included or excluded list
-        #  - skip empty lists
-        #  - generate one list entry with "NAME (NOT) IN ( 'item', ... )"
-        #
-        for my $name (keys %names) {
-            my $list = $excluded ? \@{$conf{exclude_ids}{$name}} : \@{$conf{include_ids}{$name}};
-            next unless @$list;
-            push (@result, "$names{$name} IN " . quote_list ($dbh, @$list));
+        # first insert jobids
+        my $list = $excluded ? \@{$conf{exclude}{"jobids"}} : \@{$conf{"jobids"}};
+        if (@$list) {
+            push (@result, "`jobids` $operator " . quote_list ($dbh, @$list));
+        }
+
+        # now build IN/NOT IN lists of remaining fields using their id values
+        for my $key (keys %fields) {
+            # choose included or excluded list
+            my $list     = $excluded ? \@{$conf{exclude}{$key}} :     \@{$conf{$key}};
+            my $list_ids = $excluded ? \@{$conf{exclude_ids}{$key}} : \@{$conf{include_ids}{$key}};
+
+            # for this key, want to filter by names and a list of names was specified, but no matching ids were found, so set query to return NULL set
+            if (not $excluded and @$list and not @$list_ids) { push @result, "1 = 0"; }
+
+            # skip empty lists
+            next unless @$list_ids;
+
+            push (@result, "`$fields{$key}` $operator " . quote_list ($dbh, @$list_ids));
         }
     } else {
         # For all keys in %names:
@@ -1215,7 +1230,7 @@ sub stmt_list
         for my $name (keys %names) {
             my $list = $excluded ? \@{$conf{exclude}{$name}} : \@{$conf{$name}};
             next unless @$list;
-            push (@result, "$names{$name} $in " . quote_list ($dbh, @$list));
+            push (@result, "$names{$name} $operator " . quote_list ($dbh, @$list));
         }
     }
 
@@ -1228,8 +1243,8 @@ sub order_by
     my @s = ();
     for my $key (@{$conf{sortkeys}}) {
         my $field = $conf{sortfield}{$key};
-        if ($version == 1 and $field eq "procs") {
-            # procs field wasn't added until version 2
+        if ($version == 1 and $field eq "corecount") {
+            # corecount field wasn't added until version 2
             next;
         }
         push (@s, "$field " . ($conf{sortreverse}{$key} ? "ASC" : "DESC"));
@@ -1269,24 +1284,40 @@ sub compose_query
                       "endtime >= "   . $dbh->quote ($conf{attime}{equal}));
     }
 
+    # for certain end conditions, we can assume certain start conditions and vice versa,
+    # e.g., if a job ends at or before X, it must have also started at or before X.
+    # Note that this may exclude records with errant data, where a job's start time
+    # actually is recorded as later than its end time, but the payoff is
+    # that for common queries this method defines a window of records using either
+    # the starttime or endtime indices
     if ($conf{endtime}{equal}) { 
-        push (@stmts, "endtime = " .  $dbh->quote ($conf{endtime}{equal})); 
+        # if job ended at a specific time, it must have started at or before that time
+        push (@stmts, "endtime = "    .  $dbh->quote ($conf{endtime}{equal})); 
+        push (@stmts, "starttime <= " .  $dbh->quote ($conf{endtime}{equal})); 
     }
     if ($conf{endtime}{max}) { 
-        push (@stmts, "endtime <= " .  $dbh->quote ($conf{endtime}{max})); 
+        # if job ended at or before a specific time, it must have started at or before that time
+        push (@stmts, "endtime <= "   .  $dbh->quote ($conf{endtime}{max})); 
+        push (@stmts, "starttime <= " .  $dbh->quote ($conf{endtime}{max})); 
     }
     if ($conf{endtime}{min})  { 
+        # ending after a certain time does not imply any reasonable condition on start time
         push (@stmts, "endtime >= " . $dbh->quote ($conf{endtime}{min})); 
     }
 
     if ($conf{starttime}{equal}) { 
-        push (@stmts, "starttime = " .  $dbh->quote ($conf{starttime}{equal})); 
+        # if job started at a specific time, it must have also ended at or after that time
+        push (@stmts, "starttime = " . $dbh->quote ($conf{starttime}{equal})); 
+        push (@stmts, "endtime >= "  . $dbh->quote ($conf{starttime}{equal})); 
     }
     if ($conf{starttime}{max}) { 
-        push (@stmts, "starttime <= " .  $dbh->quote ($conf{starttime}{max})); 
+        # starting before a certain time does not imply any reasonable condition on end time
+        push (@stmts, "starttime <= " . $dbh->quote ($conf{starttime}{max})); 
     }
     if ($conf{starttime}{min})  { 
+        # if job started at or after a specific time, it must have also ended at or after that time
         push (@stmts, "starttime >= " . $dbh->quote ($conf{starttime}{min})); 
+        push (@stmts, "endtime >= "   . $dbh->quote ($conf{starttime}{min})); 
     }
 
     if ($conf{numnodes} >= 0) { 
@@ -1299,16 +1330,16 @@ sub compose_query
         push @stmts, "nodecount <= " . $dbh->quote($conf{maxnodes});
     }
 
-    # procs field wasn't added until version 2 of the schema
+    # corecount field wasn't added until version 2 of the schema
     if ($version > 1) {
         if ($conf{numcores} >= 0) { 
-            push @stmts, "procs = "  . $dbh->quote($conf{numcores});
+            push @stmts, "corecount = "  . $dbh->quote($conf{numcores});
         }
         if ($conf{mincores} >= 0) { 
-            push @stmts, "procs >= " . $dbh->quote($conf{mincores});
+            push @stmts, "corecount >= " . $dbh->quote($conf{mincores});
         }
         if ($conf{maxcores} >= 0) { 
-            push @stmts, "procs <= " . $dbh->quote($conf{maxcores});
+            push @stmts, "corecount <= " . $dbh->quote($conf{maxcores});
         }
     }
 
@@ -1337,16 +1368,73 @@ sub compose_query
         }
     }
 
+    # need to query for node ids
+    my $node_join = "";
+    if ($version > 1 and $conf{track} and (@{$conf{nodes}} or @{$conf{exclude}{nodes}})) {
+        # TODO: want to use a regex here?  If so, must be worried about 'atlas2' triggering 'atlas20' and 'atlas200', etc
+        # and maybe this isn't as useful since we can do range syntax already, e.g., atlas[200-299]' fetches regex of 'atlas2..'
+        #my $in = $conf{regex} ? "REGEXP": "IN";
+        my $in = "IN";
+
+        # lookup ids for lists of node names to include or exclude
+        @{$conf{include_ids}{nodes}} = ();
+        @{$conf{exclude_ids}{nodes}} = ();
+        if (@{$conf{nodes}}) {
+            lookup_ids ($dbh, "nodes", $in, \@{$conf{nodes}},          \@{$conf{include_ids}{nodes}});
+        }
+        if (@{$conf{exclude}{nodes}}) {
+            lookup_ids ($dbh, "nodes", $in, \@{$conf{exclude}{nodes}}, \@{$conf{exclude_ids}{nodes}});
+        }
+
+        # list of nodes to include specified, but no matching ids found, set WHERE to return NULL set
+        if (@{$conf{nodes}} and not @{$conf{include_ids}{nodes}}) {
+            push @stmts, "1 = 0";
+        }
+
+        # set where clauses to pick out or exclude node ids
+        my @joins = ();
+        my $jn = 1;
+
+        # handle the included nodes first
+        my @includes = ();
+        foreach my $id (@{$conf{include_ids}{nodes}}) {
+            push @joins, "`jobs_nodes` as `jn$jn` ON `jobs`.`id` = `jn$jn`.`job_id` AND `jn$jn`.`node_id` = $id";
+            push @includes, "`jn$jn`.`node_id` IS NOT NULL";
+            $jn++;
+        }
+
+        # each record must include at least one of the listed include nodes
+        if (@includes) {
+            push @stmts, "(" . join(" OR ", @includes) . ")";
+        }
+
+        # now the excluded nodes
+        if (@{$conf{exclude_ids}{nodes}}) {
+            foreach my $id (@{$conf{exclude_ids}{nodes}}) {
+                push @joins, "`jobs_nodes` as `jn$jn` ON `jobs`.`id` = `jn$jn`.`job_id` AND `jn$jn`.`node_id` = $id";
+                # no record may include any of the excluded nodes
+                push @stmts, "`jn$jn`.`node_id` IS NULL";
+                $jn++;
+            }
+        }
+
+        # left join jobs with jobs_nodes tables
+        if (@joins) {
+            $node_join = " LEFT JOIN " . join(" LEFT JOIN ", @joins);
+        }
+    }
+
     # set the table name (version dependent)
     my $stmt = "";
     if ($version > 1) {
         $stmt = "SELECT" .
-                " `jobs`.*,`usernames`.`name` as `username`,`jobnames`.`name` as `jobname`,`jobstates`.`name` as `jobstate`,`partitions`.`name` as `partition`"
+                " `jobs`.*,`usernames`.`name` as `username`,`jobnames`.`name` as `jobname`,`jobstates`.`name` as `jobstate`,`partitions`.`name` as `partition`" .
                 " FROM `jobs`" .
                 " LEFT JOIN `usernames`  ON `jobs`.`username_id`  = `usernames`.`id`" .
                 " LEFT JOIN `jobnames`   ON `jobs`.`jobname_id`   = `jobnames`.`id`" .
                 " LEFT JOIN `jobstates`  ON `jobs`.`jobstate_id`  = `jobstates`.`id`" .
-                " LEFT JOIN `partitions` ON `jobs`.`partition_id` = `partitions`.`id`";
+                " LEFT JOIN `partitions` ON `jobs`.`partition_id` = `partitions`.`id`" .
+                $node_join;
     } else {
         $stmt = "SELECT *," .
                "UNIX_TIMESTAMP(endtime)-UNIX_TIMESTAMP(starttime) " .
@@ -1360,15 +1448,18 @@ sub compose_query
     #  If there is a limit enforced, get no more results than one
     #   more than the imposed limit.
     #
-    if ($version > 1) {
+    if ($version > 1 and $conf{track}) {
         if ($conf{limit}) {
             $stmt .= " LIMIT " . (($conf{listlimit} || $conf{limit}) + 1);
         }
     } else {
+        # disable limit if include or exclude nodes is set, need to get all records and check nodes by hand
         if ($conf{limit} && !@{$conf{nodes}} && !@{$conf{exclude}{nodes}}) {
             $stmt .= " LIMIT " . (($conf{listlimit} || $conf{limit}) + 1);
         }
     }
+
+    $stmt .= ";";
 
     return ($stmt);
 }

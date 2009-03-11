@@ -31,7 +31,7 @@ my @SLURMvars = qw(JOBID UID JOBNAME JOBSTATE PARTITION LIMIT START END NODES PR
 #  List of parameters (in order) to pass to SQL execute command below.
 #  
 my @params    = qw(jobid username uid jobname jobstate partition limit
-		           start end nodes nodecount procs);
+		           start end nodes nodecount corecount);
 
 # 
 #  Set up SQL parameters
@@ -42,8 +42,10 @@ $conf{sqluser} = "slurm";
 $conf{sqlpass} = "";
 $conf{sqlhost} = "sqlhost";
 $conf{stmt_v1} = qq(INSERT INTO slurm_job_log    VALUES (?,?,?,?,?,?,?,?,?,?,?,?));
-$conf{stmt_v2} = qq(INSERT INTO `jobs` VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?));
 $conf{confdir} = "/etc/slurm";
+
+# enables / disables node tracking per job in version 2 schema
+$conf{track} = 1;
 
 #
 #  Autocreate slurm_job_log DB if it doesn't exist?
@@ -117,6 +119,9 @@ sub read_config
     $conf{sqlhost} = $conf::SQLHOST if (defined $conf::SQLHOST);
     $conf{db}      = $conf::SQLDB   if (defined $conf::SQLDB);
 
+    # enable / disable per job node tracking
+    $conf{track} = $conf::TRACKNODES if (defined $conf::TRACKNODES);
+
     undef $conf::SQLUSER;
     undef $conf::SQLPASS;
 
@@ -136,17 +141,26 @@ sub read_config
 
 sub get_slurm_vars
 {
-    $ENV{NODES} = " " if (!$ENV{NODES}); 
+    # if a job is cancelled before it starts, set reasonable defaults for missing variables
+    #   PROCS may be set to the number of requested processors (don't know), force it to 0
+    #   NODECNT may be set to the number of requested nodes (don't know), we don't use this anyway
+    if (not $ENV{NODES}) {
+        $ENV{NODES} = "";
+        $ENV{PROCS} = 0;
+    }
+
+    # set fields in conf corresponding to each SLURM variable
     for my $var (@SLURMvars) {
         exists $ENV{$var} or
             log_fatal "$var not set in script environment! Aborting...\n";
         $conf{lc $var} = $ENV{$var};
     }
 
-    #
-    #  Get username and count nodes
+    # get username
     $conf{username}  = getpwuid($conf{uid});
-    $conf{nodecount} = expand($conf{nodes});
+
+    # set nodecount to 0 if no nodelist is specified, otherwise count the number of nodes
+    $conf{nodecount} = ($conf{nodes} =~ /^\s*$/) ? 0 : expand($conf{nodes});
 }
 
 sub create_db
@@ -205,6 +219,7 @@ sub get_last_insert_id
     my $sth = $dbh->prepare($sql);
     $sth->execute();
     my ($id) = $sth->fetchrow_array();
+    return $id;
 }
 
 # given a table and name, read id for name from table and add to id cache if found
@@ -352,18 +367,14 @@ sub insert_job_nodes
 }
 
 # compute time since epoch, attempt to account for DST changes via timelocal
-sub get_seconds_date_manip_is_buggy
+sub get_seconds
 {
     my ($date) = @_;
     use Time::Local;
 
-    my $S = UnixDate ($date, "%S");
-    my $M = UnixDate ($date, "%M");
-    my $H = UnixDate ($date, "%H");
-
-    my $d = UnixDate ($date, "%e");
-    my $m = UnixDate ($date, "%m") - 1;
-    my $y = UnixDate ($date, "%Y") - 1900;
+    my ($y, $m, $d, $H, $M, $S) = ($date =~ /(\d\d\d\d)\-(\d\d)\-(\d\d) (\d\d):(\d\d):(\d\d)/);
+    $y -= 1900;
+    $m -= 1;
 
     return timelocal ($S, $M, $H, $d, $m, $y);
 }
@@ -380,13 +391,13 @@ sub value_string_v2
     if (defined $h->{StartTime} and $h->{StartTime} !~ /^\s+$/ and
         defined $h->{EndTime}   and $h->{EndTime}   !~ /^\s+$/)
     {
-         my $start = get_seconds_date_manip_is_buggy($h->{StartTime});
-         my $end   = get_seconds_date_manip_is_buggy($h->{EndTime});
+         my $start = get_seconds($h->{StartTime});
+         my $end   = get_seconds($h->{EndTime});
          $seconds = $end - $start;
          if ($seconds < 0) { $seconds = 0; }
     }
 
-    # if procs is not set, but ppn is specified and nodecount is set, compute procs
+    # if Procs is not set, but ppn is specified and NodeCnt is set, compute Procs
     # (assumes all processors on the node were allocated to the job, only use for clusters
     # which use whole-node allocation)
 #    if (not defined $h->{Procs} and defined $conf{ppn} and defined $h->{NodeCnt}) {
@@ -408,7 +419,7 @@ sub value_string_v2
     push @parts, $dbh->quote($seconds);
     push @parts, $dbh->quote($h->{NodeList});
     push @parts, $dbh->quote($h->{NodeCnt});
-    push @parts, (defined $h->{Procs}) ? $dbh->quote($h->{Procs}) : "NULL";
+    push @parts, (defined $h->{Procs}) ? $dbh->quote($h->{Procs}) : 0;
 
     # finally, return the ('field1','field2',...) string
     return "(" . join(',', @parts) . ")";
@@ -447,9 +458,8 @@ sub append_job_db
         create_db () or return (0);
     }
 
-    # if we have schema 2 use it
-    # otherwise, try schema 1
-    # if neither is found, just print an error
+    # if we have schema 2 use it, otherwise, try schema 1
+    # if neither is found, print an error
     if (table_exists ($dbh, "jobs")) {
         # value_string_v2 expects certain field names, so convert conf
         my %h = ();
@@ -466,7 +476,7 @@ sub append_job_db
         $h{NodeCnt}   = $conf{nodecount};
         $h{Procs}     = $conf{procs};
 
-        # convert hash to VALUES
+        # convert hash to VALUES clause
         $value_string = value_string_v2 ($dbh, \%h);
 
         # insert into v2 schema
@@ -474,6 +484,12 @@ sub append_job_db
         if (not do_sql ($dbh, $sql)) {
             log_error "Problem inserting into slurm table: $sql: error: ", $dbh->errstr, "\n"; 
             return 0;
+        }
+
+        # insert nodes used by this job if node tracking is enabled
+        if ($conf{track}) {
+            my $job_id = get_last_insert_id ($dbh);
+            insert_job_nodes ($dbh, $job_id, $h{NodeList});
         }
     } elsif (table_exists ($dbh, "slurm_job_log")) {
         # insert into v1 schema

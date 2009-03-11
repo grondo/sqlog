@@ -8,6 +8,8 @@ use DBI;
 use Digest::SHA1 qw/ sha1_hex /;
 use Getopt::Long qw/ :config gnu_getopt ignore_case /;
 use File::Basename;
+use Hostlist;
+use Time::HiRes qw( gettimeofday );
 
 # This file contains the SQL statements needed
 # to set up a 'slurm_job_log' table in a 'slurm' DB
@@ -44,7 +46,7 @@ logfiles.
     -b, --backfill    Backfill database from SLURM joblog files in ARGV.
     -x, --convert     Convert data from database schema version 1 to version 2.
     -p, --ppn=N       During conversion, specify the number of cpus per node to
-                      compute procs field on clusters that allocate whole nodes to jobs.
+                      compute corecount field on clusters that allocate whole nodes to jobs.
     -L, --localhost   Connect to DB over localhost instead of configured SQL host.
 
 EOF
@@ -63,7 +65,7 @@ $conf{localhost}= 0;
 $conf{verbose}  = 0;
 $conf{info}     = 0;
 $conf{convert}  = 0;      # convert data in version 1 table to version 2
-$conf{ppn}      = undef;  # used to set procs field during convert or backfill for machines which allocate whole nodes
+$conf{ppn}      = undef;  # used to set corecount field during convert or backfill for machines which allocate whole nodes
 
 GetOptions (
    "help|h"         => \$conf{help},
@@ -77,7 +79,7 @@ GetOptions (
    "ppn|p=i"        => \$conf{ppn},
 ) or usage ();
 
-if (!$conf{create} && !$conf{convert} && !$conf{drop} && !$conf{backfill} && !$conf{info}) {
+if (!$conf{create} && !$conf{convert} && !$conf{drop} && !$conf{backfill} && !$conf{info} && !$conf{help}) {
     log_error ("Specify at least one of --{create,convert,drop,backfill,info}\n");
     usage ();
 }
@@ -101,7 +103,8 @@ $conf{rw}{sqluser} = "slurm";
 $conf{rw}{sqlpass} = "";
 $conf{rw}{sqlnetwork} = "192.168.%.%";
 
-$conf{track} = 1; # enables / disables node tracking per job in version 2 schema
+# enables / disables node tracking per job in version 2 schema
+$conf{track} = 1;
 
 read_config ();
 
@@ -137,6 +140,7 @@ if ($conf{drop}) {
 if ($conf{create} && $dbh) {
     # if version 2 tables do not exist, create them
     if (not table_exists ($dbh, "jobs")) {
+        log_verbose ("create: Creating version 2 tables.\n");
         create_slurm_joblog_table_v2 ($dbh);
     } else {
         log_verbose ("create: SLURM database already exists.\n");
@@ -146,31 +150,31 @@ if ($conf{create} && $dbh) {
     create_db_and_slurm_users ();
 
     # create version 2 from the beginning on a brand new install
-    log_verbose ("Creating job log table(s)\n");
+    log_verbose ("create: Creating version 2 tables.\n");
     create_slurm_joblog_table_v2 ($dbh);
 
     # try to connect again
     $dbh = connect_db_rw() 
-        or log_fatal ("Failed to connect to SLURM DB after create!\n");
+        or log_fatal ("create: Failed to connect to SLURM DB after create!\n");
 }
 
-# convert slurm_job_log table to version 2 (add procs and extend nodelist columns)
+# convert slurm_job_log table to version 2 (add corecount and extend nodelist columns)
 if ($conf{convert}) {
     # attempt to convert table to version 2, if conversion fails, print an error
     # if the table has already been converted, a message is printed and no action is taken
     if (!$dbh) {
         log_fatal ("convert: Conversion requested, but connection to database failed.\n")
     }
+    log_verbose ("convert: Initiating conversion from version 1 to version 2 tables.\n");
     if (!convert_slurm_joblog_table_from_v1_to_v2 ($dbh)) {
         log_fatal ("convert: SLURM job log table conversion failed.\n");
     }
-    return;
 }
 
 # optionally backfill from logfiles
 if ($conf{backfill}) { 
     if (!$dbh) {
-        log_fatal ("Backfill requested, but connection to database failed!\n")
+        log_fatal ("backfill: Backfill requested, but connection to database failed!\n")
     }
     # if we find the version 2 schema, backfill to it
     # otherwise, if we find the version 1 schema, backfill to it
@@ -180,7 +184,7 @@ if ($conf{backfill}) {
     } elsif (table_exists ($dbh, "slurm_job_log")) {
         backfill_slurm_joblog_table_to_v1 ($dbh, @ARGV); 
     } else {
-        log_verbose ("backfill: Unknown schema version\n");
+        log_verbose ("backfill: Unknown schema version.\n");
     }
 }
 
@@ -254,6 +258,9 @@ sub read_config
     $conf{ro}{sqluser} = $conf::SQLUSER if (defined $conf::SQLUSER);
     $conf{ro}{sqlpass} = $conf::SQLPASS if (defined $conf::SQLPASS);
 
+    # enable / disable per job node tracking
+    $conf{track} = $conf::TRACKNODES if (defined $conf::TRACKNODES);
+
     undef $conf::SQLUSER;
     undef $conf::SQLPASS;
 
@@ -270,9 +277,6 @@ sub read_config
     $conf{rw}{sqlnetwork} = $conf::SQLNETWORK  if (defined $conf::SQLNETWORK);
 
     @{$conf{rw}{hosts}} = @conf::SQLRWHOSTS if (defined @conf::SQLRWHOSTS);
-
-    # enable / disable per job node tracking
-    $conf{track} = $conf::TRACKNODES if (defined $conf::TRACKNODES);
 
     my %seen;
     @{$conf{rw}{hosts}} = grep {$_ && !$seen{$_}++} @{$conf{rw}{hosts}};
@@ -396,7 +400,11 @@ sub drop_slurm_users
 sub do_sql {
     my ($dbh, $stmt) = @_;
     log_debug ("SQL: $stmt\n");
-    log_error ("SQL: $stmt failed.\n") unless $dbh->do ($stmt);
+    if (not $dbh->do ($stmt)) {
+        log_error ("FAILED SQL: $stmt ERROR: " . $dbh->errstr . "\n");
+        return 0;
+    }
+    return 1;
 }
 
 ####################
@@ -407,26 +415,31 @@ sub do_sql {
 sub drop_slurm_joblog_table_v1
 {
     my $dbh = shift @_;
+    my $success = 1;
 
     # switch to the slurm db
-    do_sql ($dbh, "USE $conf{db};"); 
+    if (not do_sql ($dbh, "USE $conf{db};")) { $success = 0; }
 
     # now drop the tables
     log_verbose ("drop: Dropping existing 'slurm_job_log' table\n");
-    do_sql ($dbh, "DROP TABLE `slurm_job_log`;");
+    my $sql = "DROP TABLE `slurm_job_log`;";
+    if (not do_sql ($dbh, $sql)) { $success = 0; }
+
+    return $success;
 }
 
 # build the table
 sub create_slurm_joblog_table_v1
 {
     my $dbh = shift @_;
+    my $success = 1;
 
     # switch to the slurm db
-    do_sql ($dbh, "USE $conf{db};"); 
+    if (not do_sql ($dbh, "USE $conf{db};")) { $success = 0; } 
 
     # keep this schema around for historical record
     # (could enable one to build a v1 table if so desired)
-    my $sql = "CREATE TABLE slurm_job_log (
+    my $sql = "CREATE TABLE IF NOT EXISTS slurm_job_log (
         id        int(10)   NOT NULL AUTO_INCREMENT,
         jobid     int(10)   NOT NULL,
         username  char(100) NOT NULL,
@@ -443,7 +456,9 @@ sub create_slurm_joblog_table_v1
         UNIQUE INDEX jobid (jobid,starttime),
         INDEX username (username)
     ) TYPE=MyISAM;";
-    do_sql ($dbh, $sql);
+    if (not do_sql ($dbh, $sql)) { $success = 0; }
+
+    return $success;
 }
 
 # given hash of values, create mysql values string for insert statement
@@ -493,14 +508,16 @@ sub backfill_slurm_joblog_table_to_v1
 {
     my $dbh = shift @_;
     my @files = @_;
+    my $success = 1;
 
     # switch to the slurm db
-    do_sql ($dbh, "USE $conf{db};");
+    if (not do_sql ($dbh, "USE $conf{db};")) { $success = 0; }
 
     # if our new table does not exist, create it
     if (not table_exists ($dbh, "slurm_job_log")) {
-        create_slurm_joblog_table_v1($dbh);
-        return 0;
+        if (not create_slurm_joblog_table_v1($dbh)) {
+            return 0;
+        }
     }
 
     log_error ("No files to backfill!\n") if (!@files);
@@ -557,6 +574,8 @@ sub backfill_slurm_joblog_table_to_v1
 
         close(IN);
     }
+
+    return $success;
 }
 
 ####################
@@ -568,17 +587,18 @@ my %IDcache = ();
 %{$IDcache{nodes}} = ();
 
 # return the auto increment value for the last inserted record
-sub getLastInsertId
+sub get_last_insert_id
 {
     my $dbh = shift @_;
     my $sql = "SELECT LAST_INSERT_ID();";
     my $sth = $dbh->prepare($sql);
     $sth->execute();
     my ($id) = $sth->fetchrow_array();
+    return $id;
 }
 
 # given a table and name, read id for name from table and add to id cache if found
-sub readID
+sub read_id
 {
     my $dbh   = shift @_;
     my $table = shift @_;
@@ -605,20 +625,20 @@ sub readID
 }
 
 # insert name into table if it does not exist, and return its id
-sub readwriteID
+sub read_write_id
 {
     my $dbh   = shift @_;
     my $table = shift @_;
     my $name  = shift @_;
 
     # attempt to read the id first, if not found, insert it and return the last insert id
-    my $id = readID($dbh, $table, $name);
+    my $id = read_id($dbh, $table, $name);
     if (not defined $id) {
         my $q_name = $dbh->quote($name);
         my $sql = "INSERT IGNORE INTO `$table` (`id`,`name`) VALUES (NULL,$q_name);";
         my $sth = $dbh->prepare($sql);
         if ($sth->execute ()) {
-            $id = getLastInsertId($dbh);
+            $id = get_last_insert_id($dbh);
             $IDcache{$table}{$name} = $id;
         }
     }
@@ -627,10 +647,11 @@ sub readwriteID
 }
 
 # given a reference to a list of nodes, read their ids from the nodes table and add them to the id cache
-sub readNodeIDs
+sub read_node_ids
 {
     my $dbh       = shift @_;
     my $nodes_ref = shift @_;
+    my $success = 1;
 
     # build list of nodes not in our cache
     my @missing_nodes = ();
@@ -648,20 +669,23 @@ sub readNodeIDs
             while (my ($table_id, $table_name) = $sth->fetchrow_array ()) {
                 $IDcache{nodes}{$table_name} = $table_id;
             }
+        } else {
+            $success = 0;
         }
     }
 
-    return;
+    return $success;
 }
 
 # given a reference to a list of nodes, insert them into the nodes table and add their ids to the id cache
-sub readwriteNodeIDs
+sub read_write_node_ids
 {
     my $dbh       = shift @_;
     my $nodes_ref = shift @_;
+    my $success = 1;
 
     # read node_ids for these nodes into our cache
-    readNodeIDs($dbh, $nodes_ref);
+    read_node_ids($dbh, $nodes_ref);
 
     # if still missing nodes, we need to insert them
     my @missing_nodes = ();
@@ -672,21 +696,22 @@ sub readwriteNodeIDs
         my @q_nodes = map $dbh->quote($_), @missing_nodes;
         my $values = join("),(", @q_nodes);
         my $sql = "INSERT IGNORE INTO `nodes` (`name`) VALUES ($values);";
-        do_sql($dbh, $sql);
+        if (not do_sql($dbh, $sql)) { $success = 0; }
 
         # fetch ids for just inserted nodes
-        readNodeIDs($dbh, $nodes_ref);
+        read_node_ids($dbh, $nodes_ref);
     }
 
-    return;
+    return $success;
 }
 
 # given a job_id and a nodelist, insert jobs_nodes records for each node used in job_id
-sub insertJobNodes
+sub insert_job_nodes
 {
     my $dbh      = shift @_;
     my $job_id   = shift @_;
     my $nodelist = shift @_;
+    my $success = 1;
 
     if (defined $job_id and defined $nodelist and $nodelist ne "") {
         my $q_job_id = $dbh->quote($job_id);
@@ -702,7 +727,7 @@ sub insertJobNodes
         my @nodes = Hostlist::expand($nodelist);
 
         # this will fill our node_id cache
-        readwriteNodeIDs($dbh, \@nodes);
+        read_write_node_ids($dbh, \@nodes);
 
         # get the node_id for each node
         my @values = ();
@@ -716,24 +741,22 @@ sub insertJobNodes
         # if we have any nodes for this job, insert them
         if (@values > 0) {
             my $sql = "INSERT IGNORE INTO `jobs_nodes` (`job_id`,`node_id`) VALUES " . join(",", @values) . ";";
-            do_sql($dbh, $sql);
+            if (not do_sql($dbh, $sql)) { $success = 0;}
         }
     }
+
+    return $success;
 }
 
 # compute time since epoch, attempt to account for DST changes via timelocal
-sub get_seconds_date_manip_is_buggy
+sub get_seconds
 {
     my ($date) = @_;
     use Time::Local;
 
-    my $S = UnixDate ($date, "%S");
-    my $M = UnixDate ($date, "%M");
-    my $H = UnixDate ($date, "%H");
-
-    my $d = UnixDate ($date, "%e");
-    my $m = UnixDate ($date, "%m") - 1;
-    my $y = UnixDate ($date, "%Y") - 1900;
+    my ($y, $m, $d, $H, $M, $S) = ($date =~ /(\d\d\d\d)\-(\d\d)\-(\d\d) (\d\d):(\d\d):(\d\d)/);
+    $y -= 1900;
+    $m -= 1;
 
     return timelocal ($S, $M, $H, $d, $m, $y);
 }
@@ -750,13 +773,13 @@ sub value_string_v2
     if (defined $h->{StartTime} and $h->{StartTime} !~ /^\s+$/ and
         defined $h->{EndTime}   and $h->{EndTime}   !~ /^\s+$/)
     {
-         my $start = get_seconds_date_manip_is_buggy($h->{StartTime});
-         my $end   = get_seconds_date_manip_is_buggy($h->{EndTime});
+         my $start = get_seconds($h->{StartTime});
+         my $end   = get_seconds($h->{EndTime});
          $seconds = $end - $start;
          if ($seconds < 0) { $seconds = 0; }
     }
 
-    # if procs is not set, but ppn is specified and nodecount is set, compute procs
+    # if Procs is not set, but ppn is specified and NodeCnt is set, compute Procs
     # (assumes all processors on the node were allocated to the job, only use for clusters
     # which use whole-node allocation)
     if (not defined $h->{Procs} and defined $conf{ppn} and defined $h->{NodeCnt}) {
@@ -767,18 +790,18 @@ sub value_string_v2
     my @parts = ();
     push @parts, (defined $h->{Id}) ? $dbh->quote($h->{Id}) : "NULL";
     push @parts, $dbh->quote($h->{JobId});
-    push @parts, $dbh->quote(readwriteID($dbh, "usernames",  $h->{UserName}));
+    push @parts, $dbh->quote(read_write_id($dbh, "usernames",  $h->{UserName}));
     push @parts, $dbh->quote($h->{UserNumb});
-    push @parts, $dbh->quote(readwriteID($dbh, "jobnames",   $h->{Name}));
-    push @parts, $dbh->quote(readwriteID($dbh, "jobstates",  $h->{JobState}));
-    push @parts, $dbh->quote(readwriteID($dbh, "partitions", $h->{Partition}));
+    push @parts, $dbh->quote(read_write_id($dbh, "jobnames",   $h->{Name}));
+    push @parts, $dbh->quote(read_write_id($dbh, "jobstates",  $h->{JobState}));
+    push @parts, $dbh->quote(read_write_id($dbh, "partitions", $h->{Partition}));
     push @parts, $dbh->quote($h->{TimeLimit});
     push @parts, $dbh->quote($h->{StartTime});
     push @parts, $dbh->quote($h->{EndTime});
     push @parts, $dbh->quote($seconds);
     push @parts, $dbh->quote($h->{NodeList});
     push @parts, $dbh->quote($h->{NodeCnt});
-    push @parts, (defined $h->{Procs}) ? $dbh->quote($h->{Procs}) : "NULL";
+    push @parts, (defined $h->{Procs}) ? $dbh->quote($h->{Procs}) : 0;
 
     # finally, return the ('field1','field2',...) string
     return "(" . join(',', @parts) . ")";
@@ -788,33 +811,34 @@ sub value_string_v2
 sub drop_slurm_joblog_table_v2
 {
     my $dbh = shift @_;
+    my $success = 1;
 
     # switch to the slurm db
-    do_sql ($dbh, "USE $conf{db};");
+    if (not do_sql ($dbh, "USE $conf{db};")) { $success = 0; }
 
     # now drop the tables
-    log_verbose ("drop: Dropping version 2 tables.\n");
-    do_sql($dbh, "DROP TABLE `jobs`;");
-    do_sql($dbh, "DROP TABLE `usernames`;");
-    do_sql($dbh, "DROP TABLE `jobnames`;");
-    do_sql($dbh, "DROP TABLE `jobstates`;");
-    do_sql($dbh, "DROP TABLE `partitions`;");
-    do_sql($dbh, "DROP TABLE `nodes`;");
-    do_sql($dbh, "DROP TABLE `jobs_nodes`;");
+    if (not do_sql($dbh, "DROP TABLE `jobs`;"))       { $success = 0; }
+    if (not do_sql($dbh, "DROP TABLE `usernames`;"))  { $success = 0; }
+    if (not do_sql($dbh, "DROP TABLE `jobnames`;"))   { $success = 0; }
+    if (not do_sql($dbh, "DROP TABLE `jobstates`;"))  { $success = 0; }
+    if (not do_sql($dbh, "DROP TABLE `partitions`;")) { $success = 0; }
+    if (not do_sql($dbh, "DROP TABLE `nodes`;"))      { $success = 0; }
+    if (not do_sql($dbh, "DROP TABLE `jobs_nodes`;")) { $success = 0; }
+
+    return $success;
 }
 
 # build all v2 tables
 sub create_slurm_joblog_table_v2
 {
     my $dbh = shift @_;
+    my $success = 1;
 
     # switch to the slurm db
-    do_sql ($dbh, "USE $conf{db};");
+    if (not do_sql ($dbh, "USE $conf{db};")) { $success = 0; }
 
     # nodelist can be null since some jobs are canceled before ever being assigned resources
-    # procs can be null since this data was not captured in the first version of the table;
-    # we don't want 0's in fields which should have non-zero values (jobs that actually ran)
-    my $sql = "CREATE TABLE `$conf{table_v2}` (
+    my $sql = "CREATE TABLE IF NOT EXISTS `jobs` (
         `id`           INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         `jobid`        INT          NOT NULL,
         `username_id`  INT UNSIGNED NOT NULL,
@@ -826,106 +850,117 @@ sub create_slurm_joblog_table_v2
         `starttime`    DATETIME     NOT NULL,
         `endtime`      DATETIME     NOT NULL,
         `runtime`      INT UNSIGNED NOT NULL,
-        `nodelist`     BLOB             NULL,
+        `nodelist`     BLOB         NOT NULL,
         `nodecount`    INT UNSIGNED NOT NULL,
-        `procs`        INT UNSIGNED     NULL,
+        `corecount`    INT UNSIGNED NOT NULL,
         UNIQUE INDEX `jobid` (`jobid`,`starttime`),
-        INDEX `starttime`    (`starttime`),
-        INDEX `endtime`      (`endtime`),
         INDEX `username_id`  (`username_id`),
         INDEX `jobname_id`   (`jobname_id`),
+        INDEX `starttime`    (`starttime`),
+        INDEX `endtime`      (`endtime`),
         INDEX `runtime`      (`runtime`),
         INDEX `nodecount`    (`nodecount`),
-        INDEX `procs`        (`procs`)
+        INDEX `corecount`    (`corecount`)
     ) TYPE=MyISAM;";
-    do_sql ($dbh, $sql);
+    if (not do_sql ($dbh, $sql)) { $success = 0; }
 
     # maps username strings to unique ids
-    $sql = "CREATE TABLE `usernames` (
+    $sql = "CREATE TABLE IF NOT EXISTS `usernames` (
         `id`   INT UNSIGNED  NOT NULL AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(1024) NOT NULL,
         UNIQUE INDEX `name` (`name`(25))
     ) TYPE=MyISAM;";
-    do_sql ($dbh, $sql);
+    if (not do_sql ($dbh, $sql)) { $success = 0; }
 
     # maps partition name strings to unique ids
-    $sql = "CREATE TABLE `partitions` (
+    $sql = "CREATE TABLE IF NOT EXISTS `partitions` (
         `id`   INT UNSIGNED  NOT NULL AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(1024) NOT NULL,
         UNIQUE INDEX `name` (`name`(25))
     ) TYPE=MyISAM;";
-    do_sql ($dbh, $sql);
+    if (not do_sql ($dbh, $sql)) { $success = 0; }
 
     # maps job state strings to unique ids
-    $sql = "CREATE TABLE `jobstates` (
+    $sql = "CREATE TABLE IF NOT EXISTS `jobstates` (
         `id`   INT UNSIGNED  NOT NULL AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(1024) NOT NULL,
         UNIQUE INDEX `name` (`name`(25))
     ) TYPE=MyISAM;";
-    do_sql ($dbh, $sql);
+    if (not do_sql ($dbh, $sql)) { $success = 0; }
 
     # maps job name strings to unique ids
-    $sql = "CREATE TABLE `jobnames` (
+    $sql = "CREATE TABLE IF NOT EXISTS `jobnames` (
         `id`   INT UNSIGNED  NOT NULL AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(1024) NOT NULL,
         UNIQUE INDEX `name` (`name`(25))
     ) TYPE=MyISAM;";
-    do_sql ($dbh, $sql);
+    if (not do_sql ($dbh, $sql)) { $success = 0; }
 
     # maps node name strings to unique ids
-    $sql = "CREATE TABLE `nodes` (
+    $sql = "CREATE TABLE IF NOT EXISTS `nodes` (
         `id`   INT UNSIGNED  NOT NULL AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(1024) NOT NULL,
         UNIQUE INDEX `name` (`name`(25))
     ) TYPE=MyISAM;";
-    do_sql ($dbh, $sql);
+    if (not do_sql ($dbh, $sql)) { $success = 0; }
 
     # insert a <jobid,nodeid> record for each node a job uses
-    $sql = "CREATE TABLE `jobs_nodes` (
+    $sql = "CREATE TABLE IF NOT EXISTS `jobs_nodes` (
         `job_id`  INT UNSIGNED NOT NULL,
         `node_id` INT UNSIGNED NOT NULL,
+        UNIQUE INDEX `job_node` (`job_id`,`node_id`),
         INDEX `node_id` (`node_id`)
     ) TYPE=MyISAM;";
-    do_sql ($dbh, $sql);
+    if (not do_sql ($dbh, $sql)) { $success = 0; }
+
+    return $success;
 }
 
 # convert all data in version 1 table to version 2 schema
 sub convert_slurm_joblog_table_from_v1_to_v2
 {
     my $dbh = shift @_;
+    my $success = 1;
 
     # switch to the slurm db
-    do_sql ($dbh, "USE $conf{db};");
+    if (not do_sql ($dbh, "USE $conf{db};")) { $success = 0; }
 
     # check that there is an older table to convert from
     if (not table_exists ($dbh, "slurm_job_log")) {
-        log_msg ("convert: 'slurm_job_log' does not exist.\n");
+        log_msg ("convert: 'slurm_job_log' table does not exist.\n");
         return 0;
     }
 
     # if our new table does not exist, create it
     if (not table_exists ($dbh, "jobs")) {
-        create_slurm_joblog_table_v2($dbh);
-        return 0;
+        log_msg ("convert: 'jobs' table does not exist, attempting to create it.\n");
+        if (not create_slurm_joblog_table_v2($dbh)) {
+            return 0;
+        }
     }
 
     # get the total count of jobs in the database (used to print percentage of progress)
     my $total_count = 0;
-    my $sth_count = $dbh->prepare("SELECT COUNT(*) FROM `slurm_job_log`");
+    my $sth_count = $dbh->prepare("SELECT COUNT(*) FROM `slurm_job_log`;");
     if ($sth_count->execute()) {
         ($total_count) = $sth_count->fetchrow_array();
     }
     my $milemarker = int($total_count / 100);
 
     # now grab all of the jobs and insert them one-by-one
-    my $sth_all_jobs = $dbh->prepare("SELECT * FROM `slurm_job_log`");
+    my $sth_all_jobs = $dbh->prepare("SELECT * FROM `slurm_job_log`;");
     my $job_id = undef;
     if ($sth_all_jobs->execute()) {
         my $count = 0;
         my $time_sum = 0;
         while (my @parts = $sth_all_jobs->fetchrow_array()) {
+            # start timer
+            my ($start_secs, $start_micros) = gettimeofday();
+
             my %h = ();
-            $h{Id}        = $parts[0];
+            # throw id away, we'll get a new one any way, and this way we can run the conversion on a live machine,
+            # since slurm-joblog.pl will be inserting records as this conversion is running
+            #$h{Id}        = $parts[0];
             $h{JobId}     = $parts[1];
             $h{UserName}  = $parts[2];
             $h{UserNumb}  = $parts[3];
@@ -937,18 +972,27 @@ sub convert_slurm_joblog_table_from_v1_to_v2
             $h{EndTime}   = $parts[9];
             $h{NodeList}  = $parts[10];
             $h{NodeCnt}   = $parts[11];
-            $h{Procs}     = $parts[12];
+            # Procs field wasn't defined in version 1 schema
+            #$h{Procs}     = $parts[12];
+
+            # bug in version 1, which set nodecount to 1 for blank hostlists
+            my $hostlist = $h{NodeList};
+            if ($hostlist =~ /^\s*$/) {
+                $h{NodeList} = "";
+                $h{NodeCnt}  = 0;
+            }
+
+            # build the values string
             my $values = value_string_v2($dbh, \%h);
 
-            # start timer and insert the job
-            my ($start_secs, $start_micros) = gettimeofday();
+            # insert the job
             my $sql = "INSERT IGNORE INTO `$conf{db}`.`jobs` VALUES $values;";
-            do_sql($dbh, $sql);
+            if (not do_sql($dbh, $sql)) { $success = 0; }
 
             # insert nodes used by this job if node tracking is enabled
             if ($conf{track}) {
-                my $job_id = $parts[0];
-                insertJobNodes($dbh, $job_id, $h{NodeList});
+                my $job_id = get_last_insert_id ($dbh);
+                insert_job_nodes ($dbh, $job_id, $h{NodeList});
             }
 
             # stop timer and print timing and progress as we go
@@ -963,11 +1007,12 @@ sub convert_slurm_joblog_table_from_v1_to_v2
                 $time_sum = 0;
             }
         }
-        return 1;
     } else {
         # select against version 1 table failed
-        return 0;
+        $success = 0;
     }
+
+    return $success;
 }
 
 # backfill data from files into version 2 tables
@@ -997,6 +1042,9 @@ sub backfill_slurm_joblog_table_to_v2
         open (IN, $f) or log_error ("Failed to open \"$file\":$!\n"), next;
 
         while (my $line = <IN>) {
+            # start timer
+            my ($start_secs, $start_micros) = gettimeofday();
+
             chomp $line;
             my @parts = split(" ", $line);
 
@@ -1025,15 +1073,14 @@ sub backfill_slurm_joblog_table_to_v2
             # set the values
             my $values = value_string_v2($dbh, \%h);
 
-            # start timer and insert the job
-            my ($start_secs, $start_micros) = gettimeofday();
+            # insert the job
             my $sql = "INSERT IGNORE INTO `jobs` VALUES $values;";
             do_sql($dbh, $sql);
 
             # insert nodes used by this job if node tracking is enabled
             if ($conf{track}) {
-                my $job_id = getLastInsertId($dbh);
-                insertJobNodes($dbh, $job_id, $h{NodeList});
+                my $job_id = get_last_insert_id ($dbh);
+                insert_job_nodes ($dbh, $job_id, $h{NodeList});
             }
 
             # stop timer and print timing and progress as we go

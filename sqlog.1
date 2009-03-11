@@ -98,7 +98,7 @@ or job states. For example: \fB--exclude --jobids\fR=\fILIST\fR or
 .TP
 .BI "-N, --nnodes " N
 List jobs that ran on exactly \fIN\fR nodes. \fIN\fR may also have the 
-form +\fIN\fR, +\fIN\fR, or \fIN\fR..\fIM\fR, to specify a minimum, 
+form +\fIN\fR, -\fIN\fR, or \fIN\fR..\fIM\fR, to specify a minimum, 
 maximum, or range of node counts. For examples see RANGE OPERATORS
 section below.
 .TP
@@ -109,6 +109,20 @@ the option \fB--nnodes\fR=+\fIN\fR.
 .BI "--maxnodes " N
 Explicity specify a maximum node count. This is equivalent to using
 the option \fB--nnodes\fR=-\fIN\fR.
+.TP
+.BI "-C, --ncores " N
+List jobs that ran on exactly \fIN\fR cores. \fIN\fR may also have the 
+form +\fIN\fR, -\fIN\fR, or \fIN\fR..\fIM\fR, to specify a minimum, 
+maximum, or range of node counts. For examples see RANGE OPERATORS
+section below.
+.TP
+.BI "--mincores " N
+Explicity specify a minimum core count. This is equivalent to using
+the option \fB--ncores\fR=+\fIN\fR.
+.TP
+.BI "--maxcores " N
+Explicity specify a maximum core count. This is equivalent to using
+the option \fB--ncores\fR=-\fIN\fR.
 .TP
 .BI "-T, --runtime " DURATION
 List jobs that ran or have run for \fIDURATION\fR. \fIDURATION\fR may
@@ -197,12 +211,13 @@ Do not limit the number of returned results. (Return all matching rows).
 This is equivalent to \fB--limit\fR=0.
 
 .SH RANGE OPERATORS
-\fITIME\fR, \fIDURATION\fR, and numeric arguments may use the RANGE OPERATORS
- '+', '-', and '..' to specify minimum, maximum, or a range of values 
-respectively.  TIME arguments may also use the '@' symbol to escape a 
-leading + or - in the TIME itself (e.g. '-1hr' means '1 hr ago').
-The \fB--time\fB, \fB--start\fR, \fB--end\fR, \fB--runtime\fB, and
-\fB--nnodes\fR options to \fBsqlog\fR all take RANGE OPERATORS.
+\fITIME\fR, \fIDURATION\fR, and numeric arguments may use the
+RANGE OPERATORS '+', '-', and '..' to specify minimum, maximum,
+or a range of values respectively.  TIME arguments may also use
+the '@' symbol to escape a leading + or - in the TIME itself
+(e.g. '-1hr' means '1 hr ago').  The \fB--time\fB, \fB--start\fR,
+\fB--end\fR, \fB--runtime\fB, and \fB--nnodes\fR options to
+\fBsqlog\fR all take RANGE OPERATORS.
 .TP
 Examples 
 .TP 20
@@ -277,10 +292,15 @@ the default \fBsqlog\fR format types \fIshort\fR, \fIlong\fR,
 and \fIfreeform\fR, though this is not recommended.
 
 .SH OUTPUT FORMAT
+\fBsqlog\fR provides precise control over the output format, which aids with
+readability and simplifies parsing via scripts.  When parsing output, be sure
+to specify each field and the expected order using the -o,--format option.
+The built-in formats (short, long, and freeform) may add or reorder fields over time.
+
 By default, \fBsqlog\fR uses the output format 
 .nf
 
-   short:jobid,partition,name,user,state,start,runtime,nnodes,nodes
+   short:jobid,partition,name,user,state,start,runtime,ncores,nnodes,nodes
 
 .fi
 
@@ -317,6 +337,9 @@ The total runtime of the job in the form
 DD-HH:MM:SS. Leading zero values may be dropped,
 for instance 4:30 is 4 minutes 30 seconds.
 .TP 
+.B "ncores | C"
+The number of cores allocated to the job.
+.TP 
 .B "nnodes | N"
 The number of nodes allocated to the job.
 .TP 
@@ -351,23 +374,18 @@ Job start time in seconds since epoch.
 Job end time in seconds since epoch.
 .TP 0
 
-A format type may be specified in addition to the format
-fields. These change the output width and in some cases
-the output format of the fields above. The format
-type may also be specified alone to the \fI--format\fR
-option. For instance \fI--format=long\fR would choose the
-default fields configured for the \fIlong\fR format type.
+A format type may be specified in addition to the format fields. These change the output width and in some cases the output format of the fields above. The format type may also be specified alone to the \fI--format\fR option. For instance \fI--format=long\fR would choose the default fields configured for the \fIlong\fR format type.
 
 .TP 20
 .B "short"
 This is the default output type. It uses the format fields:
-jobid,part,name,user,state,start,runtime,nnodes,nodes
+jobid,part,name,user,state,start,runtime,ncores,nnodes,nodes
 .TP
 .B "long"
 This format type uses longer widths for most fields, and
 displays the the full job state code by default (e.g.
 completing instead of CG). Its default format fields are:
-jobid,part,name,user,state,longstart,longend,runtime,nnodes,nodes
+jobid,part,name,user,state,longstart,longend,runtime,ncores,nnodes,nodes
 .TP
 .B "freeform"
 This is a freeform output in which full width fields are displayed
@@ -464,5 +482,3 @@ List the top 10 longest running jobs, and then the 5 oldest jobs:
 .fi
 .SH AUTHOR
 Written by Adam Moody and Mark Grondona.
-
-

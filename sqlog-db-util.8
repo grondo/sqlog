@@ -25,9 +25,9 @@ Display a usage message.
 .BI "-v, --verbose"
 Increase verbosity.
 .TP
-.BI "-d, --drop"
-Drop existing slurm_job_log table in the configured database. Currently,
-this option doesn't remove SLURM job log users or DB.
+.BI "-d, --drop=V"
+Drop tables for version V={1,2} of database schema.
+Currently, this option doesn't remove SLURM job log users or DB.
 .TP
 .BI "-c, --create"
 Create the SLURM job log DB, the slurm_job_log table, and the associated
@@ -38,6 +38,14 @@ Backfill the database with SLURM job information using the list of files
 provided on the command line. Files should be in the format created by
 SLURM's jobcomp/filetxt plugin. If the files end in .gz, they will be
 automatically unzipped at runtime.
+.TP
+.BI "-x, --convert"
+Convert data from database schema version 1 to version 2 (also see --ppn).
+.TP
+.BI "-p, --ppn=N"
+During conversion, specify the number of cores per node to
+compute corecount field on clusters that allocate whole nodes to jobs.
+This information was not captured in the version 1 schema.
 .TP
 .BI "-i, --info"
 Provide information about the currently configured DB, including the
@@ -62,11 +70,11 @@ Insert job records in database for all jobs in current SLURM txt joblog files:
    sqlog-db-util --backfill /var/log/slurm/joblog*
 
 .fi
-Drop any existing database, recreate using current configuration,
+Drop an existing version 2 database, recreate using current configuration,
  and seed the new database using SLURM joblog files:
 .nf 
 
-   sqlog-db-util -dcb /var/log/slurm/joblog*
+   sqlog-db-util -d 2 -cb /var/log/slurm/joblog*
 
 .fi
 

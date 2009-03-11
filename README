@@ -42,6 +42,7 @@ The available variables in each config file include:
  SQLUSER          Read-only user      (default = slurm_read)
  SQLPASS          Read-only password  (default = none)
  SQLDB            DB name             (default = slurm)
+ TRACKNODES       Set to 0 to disable per-job node tracking (default = 1)
  %FORMATS         Hash of format aliases (e.g. "f1" => "jid,name,user,state")
 
  slurm-joblog.conf:
@@ -77,10 +78,55 @@ will be automatically run the first time the database is accessed.
 CONVERTING JOB LOG DATABASE
 
 The database schema changed from v0.12 to v0.13 of the sqlog package.
-To convert databases built with versions v0.12 and earlier to the
-current schmema, run the following command:
+The highest schema version currently running on a system can be
+determined from the --info output.
 
-  sqlog-db-util --convert
+To create the new schema, run:
+
+ sqlog-db-util --create
+
+Once created, the slurm-joblog.pl script will detect the new schema
+and automatically switch to insert records to the new tables.  The sqlog command
+will query both schemas for records.
+
+To convert an existing database from the older schema to the newer version,
+use the --convert option.  The new schema adds a new field to record the number
+of cores allocated to a job.  This data was not captured in the version 1 schema.
+However, on many systems, it can be computed.
+
+On systems that have the same number of cores per node and allocate whole
+nodes to a job, one may use the --ppn option to specify the number of cores
+per node.  This --ppn value is multiplied with the node count recorded in
+the version 1 schema to determine the number of cores allocated to the job.
+For example, to convert from schema version 1 to version 2 on a
+machine that has 8 cores per node and allocates whole nodes to jobs,
+run the following command:
+
+ sqlog-db-util --convert --ppn=8
+
+For all other systems, do not specify --ppn.  In this case, the number of
+cores allocated will be set to 0.  The conversion command on these systems
+is simply:
+
+ sqlog-db-util --convert
+
+If a mistake is made during conversion, you can drop the version 2 tables
+and start from scratch (be careful to specify '2' and not '1' here):
+
+ sqlog-db-util --drop=2
+
+You may issue the --convert command on a live system, however, be
+careful to specify the command correctly in this case.  The slurm-joblog.pl
+script will insert records to the new schema as soon as it is created.
+If a mistake is made during conversion, and the version 2 tables must
+be dropped and recreated, any records inserted by slurm-joblog.pl will be lost.
+
+After conversion, sqlog may report duplicate records as it finds
+matches from both the version 1 and version 2 tables.  Once converted,
+it's recommended that the version 1 tables be dropped by running the
+following command (be careful to specify '1' and not '2' here):
+
+ sqlog-db-util --drop=1
 
 ENABLE JOB LOGGING
 
