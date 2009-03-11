@@ -495,7 +495,7 @@ sub insert_values_v1
         for (my $i = 0; $i < 50 and @values; $i++) { 
             push @subvalues, shift @values; 
         }
-        my $sql = "INSERT REPLACE INTO `$conf{db}`.`slurm_job_log` VALUES " . 
+        my $sql = "INSERT IGNORE INTO `$conf{db}`.`slurm_job_log` VALUES " . 
             join(",", @subvalues) . ";";
 
         #log_debug ("SQL: $sql\n");
