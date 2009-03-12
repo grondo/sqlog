@@ -792,7 +792,7 @@ sub insert_job_nodes
             my $sql = "INSERT IGNORE INTO `jobs_nodes` (`job_id`,`node_id`) VALUES " . join(",", @values) . ";";
             my $sth = $dbh->prepare($sql);
             if (not $sth->execute ()) {
-                log_error ("Inserting jobs_nodes records for job idd $job_id --> " . $dbh->errstr . "\n");
+                log_error ("Inserting jobs_nodes records for job id $job_id: $sql --> " . $dbh->errstr . "\n");
                 $success = 0;
             }
         }
