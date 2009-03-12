@@ -228,10 +228,16 @@ sub table_exists
 sub get_last_insert_id
 {
     my $dbh = shift @_;
+    my $id = undef;
+
     my $sql = "SELECT LAST_INSERT_ID();";
     my $sth = $dbh->prepare($sql);
-    $sth->execute();
-    my ($id) = $sth->fetchrow_array();
+    if ($sth->execute()) {
+        ($id) = $sth->fetchrow_array();
+    } else {
+        log_error ("Fetching last id: $sql\n");
+    }
+
     return $id;
 }
 
@@ -254,6 +260,8 @@ sub read_id
                 $IDcache{$table}{$name} = $table_id;
                 $id = $table_id;
             }
+        } else {
+            log_error ("Reading record: $sql --> " . $dbh->errstr . "\n");
         }
     } else {
         $id = $IDcache{$table}{$name};
@@ -277,7 +285,12 @@ sub read_write_id
         my $sth = $dbh->prepare($sql);
         if ($sth->execute ()) {
             $id = get_last_insert_id($dbh);
+            if (not defined $id or $id == 0) {
+                log_error ("Error inserting new record (id=0): $sql\n");
+            }
             $IDcache{$table}{$name} = $id;
+        } else {
+            log_error ("Error inserting new record: $sql --> " . $dbh->errstr . "\n");
         }
     }
 
@@ -289,6 +302,7 @@ sub read_node_ids
 {
     my $dbh       = shift @_;
     my $nodes_ref = shift @_;
+    my $success = 1;
 
     # build list of nodes not in our cache
     my @missing_nodes = ();
@@ -306,10 +320,13 @@ sub read_node_ids
             while (my ($table_id, $table_name) = $sth->fetchrow_array ()) {
                 $IDcache{nodes}{$table_name} = $table_id;
             }
+        } else {
+            log_error ("Reading nodes: $sql --> " . $dbh->errstr . "\n");
+            $success = 0;
         }
     }
 
-    return;
+    return $success;
 }
 
 # given a reference to a list of nodes, insert them into the nodes table and add their ids to the id cache
@@ -317,6 +334,7 @@ sub read_write_node_ids
 {
     my $dbh       = shift @_;
     my $nodes_ref = shift @_;
+    my $success = 1;
 
     # read node_ids for these nodes into our cache
     read_node_ids($dbh, $nodes_ref);
@@ -330,13 +348,17 @@ sub read_write_node_ids
         my @q_nodes = map $dbh->quote($_), @missing_nodes;
         my $values = join("),(", @q_nodes);
         my $sql = "INSERT IGNORE INTO `nodes` (`name`) VALUES ($values);";
-        do_sql($dbh, $sql);
+        my $sth = $dbh->prepare($sql);
+        if (not $sth->execute ()) {
+            log_error ("Inserting nodes: $sql --> " . $dbh->errstr . "\n");
+            $success = 0;
+        }
 
         # fetch ids for just inserted nodes
         read_node_ids($dbh, $nodes_ref);
     }
 
-    return;
+    return $success;
 }
 
 # given a job_id and a nodelist, insert jobs_nodes records for each node used in job_id
@@ -345,6 +367,7 @@ sub insert_job_nodes
     my $dbh      = shift @_;
     my $job_id   = shift @_;
     my $nodelist = shift @_;
+    my $success = 1;
 
     if (defined $job_id and defined $nodelist and $nodelist ne "") {
         my $q_job_id = $dbh->quote($job_id);
@@ -374,9 +397,15 @@ sub insert_job_nodes
         # if we have any nodes for this job, insert them
         if (@values > 0) {
             my $sql = "INSERT IGNORE INTO `jobs_nodes` (`job_id`,`node_id`) VALUES " . join(",", @values) . ";";
-            do_sql($dbh, $sql);
+            my $sth = $dbh->prepare($sql);
+            if (not $sth->execute ()) {
+                log_error ("Inserting jobs_nodes records for job idd $job_id --> " . $dbh->errstr . "\n");
+                $success = 0;
+            }
         }
     }
+
+    return $success;
 }
 
 # compute time since epoch, attempt to account for DST changes via timelocal

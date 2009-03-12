@@ -37,15 +37,22 @@ read-only and read-write users.
 Backfill the database with SLURM job information using the list of files
 provided on the command line. Files should be in the format created by
 SLURM's jobcomp/filetxt plugin. If the files end in .gz, they will be
-automatically unzipped at runtime.
+automatically unzipped at runtime.  Also see --cores.
+.TP
+.BI "-B, --backup"
+Dump data from tables to a file readable by --backfill.  Also see --cores.
 .TP
 .BI "-x, --convert"
-Convert data from database schema version 1 to version 2 (also see --ppn).
+Convert data from database schema version 1 to version 2.  Also see --cores.
 .TP
-.BI "-p, --ppn=N"
-During conversion, specify the number of cores per node to
-compute corecount field on clusters that allocate whole nodes to jobs.
-This information was not captured in the version 1 schema.
+.BI "-C, --cores=N"
+The version 1 schema did not record the number of cores allocated to a job.
+For systems that allocate whole nodes to jobs and have the same number of
+cores per node, the number of cores allocated to a job can be computed
+by multiplying the number of node allocated to a job by the number of
+cores per node.  On such systems, use the --cores option to specify the
+number of cores per node.  This option can be used during --convert,
+--backfill, and --backup operations.
 .TP
 .BI "-i, --info"
 Provide information about the currently configured DB, including the
