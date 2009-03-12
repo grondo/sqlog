@@ -47,6 +47,10 @@ $conf{confdir} = "/etc/slurm";
 # enables / disables node tracking per job in version 2 schema
 $conf{track} = 1;
 
+# assume neither version 1 nor version 2 are available
+$conf{version}{1} = 0;
+$conf{version}{2} = 0;
+
 #
 #  Autocreate slurm_job_log DB if it doesn't exist?
 #
@@ -207,8 +211,17 @@ sub table_exists
 {
     my $dbh   = shift @_;
     my $table = shift @_;
-    $dbh->do ("DESCRIBE `$conf{db}`.`$table`;") or return 0;
-    return 1;
+
+    # check whether our database has a table by the proper name
+    my $sth = $dbh->prepare("SHOW TABLES;");
+    if ($sth->execute()) {
+        while (my ($name) = $sth->fetchrow_array()) {
+            if ($name eq $table) { return 1; }
+        }
+    }
+
+    # didn't find it
+    return 0;
 }
 
 # return the auto increment value for the last inserted record
@@ -452,15 +465,19 @@ sub append_job_db
             or return (0);
     }
 
+    # check whether we have version 1 and version 2 schemas
+    $conf{version}{1} = table_exists ($dbh, 'slurm_job_log');
+    $conf{version}{2} = table_exists ($dbh, 'jobs');
+
     # Check for tables, if not found, try to create them
-    if (not table_exists ($dbh, "jobs") and not table_exists ($dbh, "slurm_job_log")) {
+    if (not $conf{version}{1} and not $conf{version}{2}) {
         log_msg ("SLURM job log table doesn't exist in DB. Creating.\n");
         create_db () or return (0);
     }
 
     # if we have schema 2 use it, otherwise, try schema 1
     # if neither is found, print an error
-    if (table_exists ($dbh, "jobs")) {
+    if ($conf{version}{2}) {
         # value_string_v2 expects certain field names, so convert conf
         my %h = ();
         $h{JobId}     = $conf{jobid};
@@ -477,7 +494,7 @@ sub append_job_db
         $h{Procs}     = $conf{procs};
 
         # convert hash to VALUES clause
-        $value_string = value_string_v2 ($dbh, \%h);
+        my $value_string = value_string_v2 ($dbh, \%h);
 
         # insert into v2 schema
         my $sql = "INSERT INTO `jobs` VALUES $value_string;";
@@ -491,7 +508,7 @@ sub append_job_db
             my $job_id = get_last_insert_id ($dbh);
             insert_job_nodes ($dbh, $job_id, $h{NodeList});
         }
-    } elsif (table_exists ($dbh, "slurm_job_log")) {
+    } elsif ($conf{version}{1}) {
         # insert into v1 schema
         my @params_v1 = @params;
         pop @params_v1;

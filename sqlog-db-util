@@ -233,12 +233,22 @@ sub connect_db_root
     return ($conf{dbh}{root});
 }
 
+# returns 1 if table exists, 0 otherwise
 sub table_exists
 {
     my $dbh   = shift @_;
     my $table = shift @_;
-    $dbh->do ("DESCRIBE `$conf{db}`.`$table`;") or return 0;
-    return 1;
+
+    # check whether our database has a table by the proper name
+    my $sth = $dbh->prepare("SHOW TABLES;");
+    if ($sth->execute()) {
+        while (my ($name) = $sth->fetchrow_array()) {
+            if ($name eq $table) { return 1; }
+        }
+    }
+
+    # didn't find it
+    return 0;
 }
 
 sub read_config 

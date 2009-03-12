@@ -127,6 +127,10 @@ $conf{confdir}    = "/etc/slurm";
 # enables / disables node tracking per job in version 2 schema
 $conf{track} = 1;
 
+# assume neither version 1 nor version 2 are available
+$conf{version}{1} = 0;
+$conf{version}{2} = 0;
+
 #  Default max number of rows to fetch:
 $conf{limit}      = 25;
 
@@ -277,15 +281,22 @@ parse_cmdline ();
 #  Initialize DBI:
 $conf{dbh}  = dbh_init ();
 
-#  Compose a query based on options:
-$conf{stmt_v1} = compose_query (1, $conf{dbh}) 
-                or log_fatal ("Failed to generate query\n");
-log_verbose ("Running query: \"$conf{stmt_v1}\"\n");
+$conf{version}{1} = table_exists ($conf{dbh}, 'slurm_job_log');
+$conf{version}{2} = table_exists ($conf{dbh}, 'jobs');
 
 #  Compose a query based on options:
-$conf{stmt_v2} = compose_query (2, $conf{dbh}) 
-                or log_fatal ("Failed to generate query\n");
-log_verbose ("Running query: \"$conf{stmt_v2}\"\n");
+if ($conf{version}{1}) {
+    $conf{stmt_v1} = compose_query (1, $conf{dbh}) 
+                    or log_fatal ("Failed to generate query\n");
+    log_verbose ("Running query: \"$conf{stmt_v1}\"\n");
+}
+
+#  Compose a query based on options:
+if ($conf{version}{2}) {
+    $conf{stmt_v2} = compose_query (2, $conf{dbh}) 
+                    or log_fatal ("Failed to generate query\n");
+    log_verbose ("Running query: \"$conf{stmt_v2}\"\n");
+}
 
 #  Don't do anymore if --dry-run was specified.
 exit 0 if ($conf{dry_run});
@@ -294,10 +305,14 @@ exit 0 if ($conf{dry_run});
 query_running_jobs () unless ($conf{no_running});
 
 #  Execute DB query and grab results:
-run_query (1, $conf{stmt_v1}) unless ($conf{nodb});
+if ($conf{version}{1}) {
+    run_query (1, $conf{stmt_v1}) unless ($conf{nodb});
+}
 
 #  Execute DB query and grab results:
-run_query (2, $conf{stmt_v2}) unless ($conf{nodb});
+if ($conf{version}{2}) {
+    run_query (2, $conf{stmt_v2}) unless ($conf{nodb});
+}
 
 #  Sort by requested keys
 log_verbose ("sorting by keys @{$conf{sortkeys}}\n");
@@ -1019,6 +1034,24 @@ sub sort_by_start
 #
 # DB routines
 #
+
+# returns 1 if table exists, 0 otherwise
+sub table_exists
+{
+    my $dbh   = shift @_;
+    my $table = shift @_;
+
+    # check whether our database has a table by the proper name
+    my $sth = $dbh->prepare("SHOW TABLES;");
+    if ($sth->execute()) {
+        while (my ($name) = $sth->fetchrow_array()) {
+            if ($name eq $table) { return 1; }
+        }
+    }
+
+    # didn't find it
+    return 0;
+}
 
 sub get_seconds_date_manip_is_buggy
 {
