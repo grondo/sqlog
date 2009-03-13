@@ -22,6 +22,12 @@ for DB creation.
 .BI "-h, --help"
 Display a usage message.
 .TP
+.BI "-i, --info"
+Provide information about the currently configured DB, including the
+server hostname, read-only username, read-write username, SLURM job
+log database name, and the total number of jobs currently stored in
+the DB.
+.TP
 .BI "-v, --verbose"
 Increase verbosity.
 .TP
@@ -39,11 +45,24 @@ provided on the command line. Files should be in the format created by
 SLURM's jobcomp/filetxt plugin. If the files end in .gz, they will be
 automatically unzipped at runtime.  Also see --cores.
 .TP
-.BI "-B, --backup"
-Dump data from tables to a file readable by --backfill.  Also see --cores.
-.TP
 .BI "-x, --convert"
 Convert data from database schema version 1 to version 2.  Also see --cores.
+.TP
+.BI "-B, --backup=RANGE"
+Copy data from tables to a file (readable by --backfill).
+Specify records via a range of job start times.  RANGE can be any
+of: "all", DATE, or DATE..DATE; where DATE is 'yyyy-mm-dd hh:mm:ss',
+to specify all jobs, all jobs with a start time older than DATE,
+or all jobs with a start time between DATE..DATE, respectively.
+Also see --cores and --obfuscate.
+.TP
+.BI "-o, --obfuscate"
+Obfuscate usernames, userids, and jobnames during a backup operation.
+This is useful when sharing joblogs with outside collaborators.
+.TP
+.BI "-p, --prune=DATE"
+Prune database of all jobs with start times older than DATE; write such records to a file.
+DATE must be in format of 'yyyy-mm-dd hh:mm:ss'.  Also see --cores.
 .TP
 .BI "-C, --cores=N"
 The version 1 schema did not record the number of cores allocated to a job.
@@ -54,11 +73,18 @@ cores per node.  On such systems, use the --cores option to specify the
 number of cores per node.  This option can be used during --convert,
 --backfill, and --backup operations.
 .TP
-.BI "-i, --info"
-Provide information about the currently configured DB, including the
-server hostname, read-only username, read-write username, SLURM job
-log database name, and the total number of jobs currently stored in
-the DB.
+.BI "--notrack"
+Disable per-job node tracking for jobs inserted during convert
+or backfill operations.  If node-tracking is enabled on a system,
+i.e., TRACKNODES is not set or is set to 1 in sqlog.conf,
+then such jobs will not show up in queries involving specific node names.
+.TP
+.BI "--delay-index"
+Temporarily disable node tracking indicies for jobs inserted during
+convert of backfill operations.  This drops the indicies, inserts the jobs,
+and rebuilds the indicies.  When converting or inserting lots of records,
+this speeds up the operation, however, it makes things slower when loading
+only a few records.
 .TP
 .BI "-L, --localhost"
 Override the SQL host configuration and connect to DB on localhost.

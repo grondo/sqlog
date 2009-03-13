@@ -31,11 +31,6 @@ my %conf = ();
 #############################
 my $progname = basename $0;
 
-# TODO: it would be nice to add the following options
-#  -o, --obfuscate   Obfuscates usernames and jobnames during backup operations (useful to share
-#                    joblogs with offsite collaborators).
-#  -p, --prune=DATE  Prune database of all jobs older than DATE; write such records to a file.
-
 $conf{usage} = <<EOF
 Usage: $progname [OPTIONS]... [FILES]...
 
@@ -43,58 +38,39 @@ Create SLURM job completion log database along with user accounts to
 access it, and/or backfill the database from SLURM job completion
 logfiles.
 
-    -h, --help        Display this message.
-    -i, --info        Print information about current DB.
-    -v, --verbose     Be verbose.
-    -d, --drop=V      Drop tables for version V={1,2} of database schema.
-    -c, --create      Create slurm database, slurm & slurm_read users, and table.
-    -b, --backfill    Backfill database from SLURM joblog files in ARGV.
-    -B, --backup      Dump data from tables into a file (readable by --backfill).
-    -x, --convert     Convert data from database schema version 1 to version 2.
-    -C, --cores=N     During convert, backup, or backfill, specify the number of cores per node to
-                      compute corecount field on clusters that allocate whole nodes to jobs.
-    -L, --localhost   Connect to DB over localhost instead of configured SQL host.
+    -h, --help         Display this message.
+    -i, --info         Print information about current DB.
+    -v, --verbose      Be verbose.
+    -d, --drop=V       Drop tables for version V={1,2} of database schema.
+    -c, --create       Create slurm database, slurm & slurm_read users, and table.
+    -b, --backfill     Backfill database from SLURM joblog files in ARGV.
+                       Also see --cores.
+    -x, --convert      Convert data from database schema version 1 to version 2.
+                       Also see --cores.
+    -B, --backup=RANGE Copy data from tables to a file (readable by --backfill).
+                       Specify records via a range of job start times.  RANGE can be any
+                       of: "all", DATE, or DATE..DATE; where DATE is 'yyyy-mm-dd hh:mm:ss',
+                       to specify all jobs, all jobs with a start time older than DATE,
+                       or all jobs with a start time between DATE..DATE, respectively.
+                       Also see --cores and --obfuscate.
+    -o, --obfuscate    Obfuscates usernames, userids, and jobnames during backup operations,
+                       which is useful for sharing system joblogs with offsite collaborators.
+    -p, --prune=DATE   Prune database of all jobs with start times older than DATE; write such
+                       records to a file.  DATE must be in format of 'yyyy-mm-dd hh:mm:ss'
+                       Also see --cores.
+    -C, --cores=N      During backfill, convert, backup, or prune, specify the number of cores
+                       per node to compute corecount field on clusters that allocate whole
+                       nodes to jobs.
+    --notrack          Disable per-job node tracking for jobs inserted during convert
+                       or backfill operations.
+    --delay-index      Temporarily disable node tracking indicies for jobs inserted during
+                       convert of backfill operations.
+    -L, --localhost    Connect to DB over localhost instead of configured SQL host.
 
 EOF
 ;
 
 sub usage { print STDERR $conf{usage}; exit 0; }
-
-##############################
-#  Parse Command-line
-#############################
-# set defaults and read in command-line options
-$conf{backfill} = "";
-$conf{create}   = 0;
-$conf{drop}     = 0;
-$conf{localhost}= 0;
-$conf{verbose}  = 0;
-$conf{info}     = 0;
-$conf{backup}   = 0;
-$conf{convert}  = 0;      # convert data in version 1 table to version 2
-$conf{cores}    = undef;  # used to set corecount field during convert or backfill for machines which allocate whole nodes
-
-GetOptions (
-   "help|h"         => \$conf{help},
-   "backfill|b"     => \$conf{backfill},
-   "backup|B"       => \$conf{backup},
-   "create|c"       => \$conf{create},
-   "drop|d=i"       => \$conf{drop},
-   "localhost|L"    => \$conf{localhost},
-   "verbose|v+"     => \$conf{verbose},
-   "info|i"         => \$conf{info},
-   "convert|x"      => \$conf{convert},
-   "cores|C=i"      => \$conf{cores},
-) or usage ();
-
-if (!$conf{create} && !$conf{convert} && !$conf{drop} && !$conf{backfill} && !$conf{backup} && !$conf{info} && !$conf{help}) {
-    log_error ("Specify at least one of --{create,convert,drop,backfill,backup,info}.\n");
-    usage ();
-}
-
-if ($conf{help}) {
-    usage ();
-}
 
 #############################
 #  Read Config File.
@@ -118,6 +94,50 @@ read_config ();
 
 $conf{sqlhost} = "localhost" if ($conf{localhost});
 
+##############################
+#  Parse Command-line
+#############################
+
+# set defaults and read in command-line options
+$conf{verbose}   = 0;
+$conf{info}      = 0;
+$conf{drop}      = 0;
+$conf{create}    = 0;
+$conf{backfill}  = "";
+$conf{convert}   = 0;      # convert data in version 1 table to version 2
+$conf{backup}    = 0;
+$conf{obfuscate} = 0;
+$conf{prune}     = undef;
+$conf{cores}     = undef;  # used to set corecount field during convert or backfill for machines which allocate whole nodes
+$conf{indicies}  = 1;      # if set to 0, remove node-tracking indicies, insert nodes, and renable indicies
+$conf{localhost} = 0;
+
+GetOptions (
+   "help|h"         => \$conf{help},
+   "verbose|v+"     => \$conf{verbose},
+   "info|i"         => \$conf{info},
+   "drop|d=i"       => \$conf{drop},
+   "create|c"       => \$conf{create},
+   "backfill|b"     => \$conf{backfill},
+   "convert|x"      => \$conf{convert},
+   "backup|B=s"     => \$conf{backup},
+   "obfuscate|o"    => \$conf{obfuscate},
+   "prune|p=s"      => \$conf{prune},
+   "cores|C=i"      => \$conf{cores},
+   "notrack"        => sub { $conf{track} = 0; },
+   "delay-index"    => sub { $conf{indicies} = 0; },
+   "localhost|L"    => \$conf{localhost},
+) or usage ();
+
+if (!$conf{create} && !$conf{convert} && !$conf{drop} && !$conf{backfill} && !$conf{backup} && !$conf{prune} && !$conf{info} && !$conf{help}) {
+    log_error ("Specify at least one of --{create,convert,drop,backfill,backup,prune,info}.\n");
+    usage ();
+}
+
+if ($conf{help}) {
+    usage ();
+}
+
 #############################
 # Attempt to connect to slurm database
 #############################
@@ -126,15 +146,28 @@ $conf{sqlhost} = "localhost" if ($conf{localhost});
 my $dbh = connect_db_rw ();
 
 # backup table data -- writes records to a file readable by backfill
-if ($conf{backup}) { 
+# global variables to help obfuscate user and jobnames
+my %obfuscate = ();
+my $num_users = 0;
+my $num_jobs  = 0;
+if ($conf{backup} or defined $conf{prune}) { 
+    # check that we have a db connection
     if (!$dbh) {
-        log_fatal ("backup: Backup requested, but connection to database failed!\n")
+        log_fatal ("Data dump requested, but connection to database failed!\n")
     }
+
+    # check that user gave us exactly one file name
+    if (@ARGV != 1) {
+        log_fatal ("You must specify a date range and a filename to append data to.\n");
+    }
+    my $joblog = shift @ARGV;
+
+    # dump data to joblog file
     if (table_exists ($dbh, "slurm_job_log")) {
-        backup_slurm_joblog_table (1, $dbh, @ARGV); 
+        dump_slurm_joblog_table (1, $dbh, $joblog); 
     }
     if (table_exists ($dbh, "jobs")) {
-        backup_slurm_joblog_table (2, $dbh, @ARGV); 
+        dump_slurm_joblog_table (2, $dbh, $joblog); 
     }
 }
 
@@ -205,7 +238,7 @@ if ($conf{backfill}) {
     } elsif (table_exists ($dbh, "slurm_job_log")) {
         backfill_slurm_joblog_table_to_v1 ($dbh, @ARGV); 
     } else {
-        log_verbose ("backfill: Unknown schema version.\n");
+        log_fatal ("backfill: Unknown schema version.\n");
     }
 }
 
@@ -567,29 +600,37 @@ sub backfill_slurm_joblog_table_to_v1
             chomp $line;
             my @parts = split(" ", $line);
 
-            my %hash = ();
+            my %h = ();
             foreach my $part (@parts) {
                 my ($key, $value) = split("=", $part);
-                $hash{$key} = $value;
+                $h{$key} = $value;
             }
 
             # Some very old joblog files may have the incorrect
-            #  datetime format. Unfortunately, the year wasn't 
+            #  datetime format. Unfortunately, the year wasn't
             #  included in these, so we have to drop these entries :-(
-            if ($hash{StartTime} =~ m{^\d\d/\d\d-}) {
+            if (defined $h{StartTime} and $h{StartTime} =~ m{^\d\d/\d\d-}) {
                 $skipped++;
                 next;
             }
 
             # convert from slurm log to format for MySQL
-            my $userid = $hash{"UserId"};
-            my ($username, $usernumb) = ($userid =~ /(.+)\((\d+)\)/);
-            $hash{"UserName"} = $username;
-            $hash{"UserNumb"} = $usernumb;
-            $hash{"StartTime"} =~ s/T/ /;
-            $hash{"EndTime"} =~ s/T/ /;
+            if (defined $h{"UserId"}) {
+                my $userid = $h{"UserId"};
+                my ($username, $usernumb) = ($userid =~ /(.+)\((\d+)\)/);
+                if (defined $username and defined $usernumb) {
+                    $h{"UserName"} = $username;
+                    $h{"UserNumb"} = $usernumb;
+                }
+            }
+            if (defined $h{"StartTime"}) {
+                $h{"StartTime"} =~ s/T/ /;
+            }
+            if (defined $h{"EndTime"}) {
+                $h{"EndTime"}   =~ s/T/ /;
+            }
 
-            push @values, value_string_v1($dbh, \%hash);
+            push @values, value_string_v1($dbh, \%h);
             
             if (@values > 100) {
                 insert_values_v1($dbh, @values);
@@ -642,6 +683,10 @@ sub read_id
     my $name  = shift @_;
 
     my $id = undef;
+
+    # if name is not set, don't try to look it up in hash, just return undef
+    if (not defined $name) { return $id; }
+
     if (not defined $IDcache{$table}) { %{$IDcache{$table}} = (); }
     if (not defined $IDcache{$table}{$name}) {
         my $q_name = $dbh->quote($name);
@@ -670,6 +715,10 @@ sub read_write_id
     my $table = shift @_;
     my $name  = shift @_;
 
+    # if name isn't set, set it to the empty string
+    # DON'T do this in slurm-joblog, it will fail and write to the joblog instead
+    if (not defined $name) { $name = ""; }
+
     # attempt to read the id first, if not found, insert it and return the last insert id
     my $id = read_id($dbh, $table, $name);
     if (not defined $id) {
@@ -677,13 +726,18 @@ sub read_write_id
         my $sql = "INSERT IGNORE INTO `$table` (`id`,`name`) VALUES (NULL,$q_name);";
         my $sth = $dbh->prepare($sql);
         if ($sth->execute ()) {
-            $id = get_last_insert_id($dbh);
-            if (not defined $id or $id == 0) {
+            # user read_id here instead of get_last_insert_id to avoid race conditions
+            $id = read_id ($dbh, $table, $name);
+            if (not defined $id) {
+                log_error ("Error inserting new record (id undefined): $sql\n");
+                $id = 0;
+            } elsif ($id == 0) {
                 log_error ("Error inserting new record (id=0): $sql\n");
+                $id = 0;
             }
-            $IDcache{$table}{$name} = $id;
         } else {
             log_error ("Error inserting new record: $sql --> " . $dbh->errstr . "\n");
+            $id = 0;
         }
     }
 
@@ -789,7 +843,8 @@ sub insert_job_nodes
 
         # if we have any nodes for this job, insert them
         if (@values > 0) {
-            my $sql = "INSERT IGNORE INTO `jobs_nodes` (`job_id`,`node_id`) VALUES " . join(",", @values) . ";";
+            my $sql = "INSERT DELAYED IGNORE INTO `jobs_nodes` (`job_id`,`node_id`) VALUES " . join(",", @values) . ";";
+            #my $sql = "INSERT IGNORE INTO `jobs_nodes` (`job_id`,`node_id`) VALUES " . join(",", @values) . ";";
             my $sth = $dbh->prepare($sql);
             if (not $sth->execute ()) {
                 log_error ("Inserting jobs_nodes records for job id $job_id: $sql --> " . $dbh->errstr . "\n");
@@ -823,8 +878,8 @@ sub value_string_v2
     # given start and end times, compute the number of seconds the job ran for
     # TODO: unsure whether this correctly handles jobs that straddle DST changes
     my $seconds = 0;
-    if (defined $h->{StartTime} and $h->{StartTime} !~ /^\s+$/ and
-        defined $h->{EndTime}   and $h->{EndTime}   !~ /^\s+$/)
+    if (defined $h->{StartTime} and $h->{StartTime} !~ /^\s*$/ and
+        defined $h->{EndTime}   and $h->{EndTime}   !~ /^\s*$/)
     {
          my $start = get_seconds($h->{StartTime});
          my $end   = get_seconds($h->{EndTime});
@@ -931,7 +986,7 @@ sub create_slurm_joblog_table_v2
     ) TYPE=MyISAM;";
     if (not do_sql ($dbh, $sql)) { $success = 0; }
 
-    # TODO: The UNIQUE INDEX below ensures that two jobs with the same name (etc.)
+    # NOTE: The UNIQUE INDEX below ensures that two jobs with the same name (etc.)
     # that complete around the same time do not insert two records.  The downside
     # is that the index prefix length cannot be more than 1000 bytes, so names
     # must be limited by the prefix size.
@@ -1011,6 +1066,14 @@ sub convert_slurm_joblog_table_from_v1_to_v2
         }
     }
 
+    # if tracking and --noindicies was specified, remove indicies before insert, we'll add them back later
+    if ($conf{track} and not $conf{indicies}) {
+        my $drop = "ALTER TABLE `jobs_nodes` DROP INDEX `job_node`, DROP INDEX `node_id`;";
+        if (not do_sql ($dbh, $drop)) {
+            log_error ("Problem dropping node tracking indicies.\n");
+        }
+    }
+
     # get the total count of jobs in the database (used to print percentage of progress)
     my $total_count = 0;
     my $sth_count = $dbh->prepare("SELECT COUNT(*) FROM `slurm_job_log`;");
@@ -1018,6 +1081,7 @@ sub convert_slurm_joblog_table_from_v1_to_v2
         ($total_count) = $sth_count->fetchrow_array();
     }
     my $milemarker = int($total_count / 100);
+    if ($milemarker == 0) { $milemarker = 1; }
 
     # now grab all of the jobs and insert them one-by-one
     my $sth_all_jobs = $dbh->prepare("SELECT * FROM `slurm_job_log`;");
@@ -1058,13 +1122,22 @@ sub convert_slurm_joblog_table_from_v1_to_v2
             my $values = value_string_v2($dbh, \%h);
 
             # insert the job
-            my $sql = "INSERT IGNORE INTO `$conf{db}`.`jobs` VALUES $values;";
-            if (not do_sql($dbh, $sql)) { $success = 0; }
-
-            # insert nodes used by this job if node tracking is enabled
             if ($conf{track}) {
-                my $job_id = get_last_insert_id ($dbh);
-                insert_job_nodes ($dbh, $job_id, $h{NodeList});
+                # insert the job, need to wait on the insert since we need the job_id
+                my $sql = "INSERT IGNORE INTO `$conf{db}`.`jobs` VALUES $values;";
+                if (not do_sql($dbh, $sql)) {
+                    $success = 0;
+                } else {
+                    # now insert nodes used by this job
+                    my $job_id = get_last_insert_id ($dbh);
+                    if (defined $job_id and $job_id != 0) {
+                        insert_job_nodes ($dbh, $job_id, $h{NodeList});
+                    }
+                }
+            } else {
+                # insert the job, no need to wait on it
+                my $sql = "INSERT DELAYED IGNORE INTO `$conf{db}`.`jobs` VALUES $values;";
+                if (not do_sql($dbh, $sql)) { $success = 0; }
             }
 
             # stop timer and print timing and progress as we go
@@ -1074,7 +1147,8 @@ sub convert_slurm_joblog_table_from_v1_to_v2
             $count++;
             if ($count % $milemarker == 0) {
                 my $avg_time = int($time_sum / $count);
-                my $perc = sprintf("%.0f", $count / $total_count * 100);
+                my $perc = "";
+                if ($total_count > 0) { $perc = sprintf("%.0f", $count / $total_count * 100); }
                 log_msg ("Records converted $count ($perc%): $avg_time usec / record\n");
                 $time_sum = 0;
             }
@@ -1082,6 +1156,16 @@ sub convert_slurm_joblog_table_from_v1_to_v2
     } else {
         # select against version 1 table failed
         $success = 0;
+    }
+
+    # rebuild indicies
+    if ($conf{track} and not $conf{indicies}) {
+        my $rebuild = "ALTER TABLE `jobs_nodes`" .
+                      " ADD UNIQUE INDEX `job_node` (`job_id`,`node_id`)," .
+                      " ADD INDEX `node_id` (`node_id`);";
+        if (not do_sql ($dbh, $rebuild)) {
+            log_error ("Problem rebuilding node tracking indicies.\n");
+        }
     }
 
     return $success;
@@ -1092,6 +1176,7 @@ sub backfill_slurm_joblog_table_to_v2
 {
     my $dbh = shift @_;
     my @files = @_;
+    my $success = 1;
 
     # switch to the slurm db
     do_sql ($dbh, "USE $conf{db};");
@@ -1102,6 +1187,14 @@ sub backfill_slurm_joblog_table_to_v2
     }
 
     log_error ("No files to backfill!\n") if (!@files);
+
+    # if tracking and --noindicies was specified, remove indicies before insert, we'll add them back later
+    if ($conf{track} and not $conf{indicies}) {
+        my $drop = "ALTER TABLE `jobs_nodes` DROP INDEX `job_node`, DROP INDEX `node_id`;";
+        if (not do_sql ($dbh, $drop)) {
+            log_error ("Problem dropping node tracking indicies.\n");
+        }
+    }
 
     my $count = 0;
     my $time_sum = 0;
@@ -1129,30 +1222,47 @@ sub backfill_slurm_joblog_table_to_v2
             # Some very old joblog files may have the incorrect
             #  datetime format. Unfortunately, the year wasn't
             #  included in these, so we have to drop these entries :-(
-            if ($h{StartTime} =~ m{^\d\d/\d\d-}) {
+            if (defined $h{StartTime} and $h{StartTime} =~ m{^\d\d/\d\d-}) {
                 $skipped++;
                 next;
             }
 
             # convert from slurm log to format for MySQL
-            my $userid = $h{"UserId"};
-            my ($username, $usernumb) = ($userid =~ /(.+)\((\d+)\)/);
-            $h{"UserName"} = $username;
-            $h{"UserNumb"} = $usernumb;
-            $h{"StartTime"} =~ s/T/ /;
-            $h{"EndTime"}   =~ s/T/ /;
+            if (defined $h{"UserId"}) {
+                my $userid = $h{"UserId"};
+                my ($username, $usernumb) = ($userid =~ /(.+)\((\d+)\)/);
+                if (defined $username and defined $usernumb) {
+                    $h{"UserName"} = $username;
+                    $h{"UserNumb"} = $usernumb;
+                }
+            }
+            if (defined $h{"StartTime"}) {
+                $h{"StartTime"} =~ s/T/ /;
+            }
+            if (defined $h{"EndTime"}) {
+                $h{"EndTime"}   =~ s/T/ /;
+            }
 
             # set the values
             my $values = value_string_v2($dbh, \%h);
 
             # insert the job
-            my $sql = "INSERT IGNORE INTO `jobs` VALUES $values;";
-            do_sql($dbh, $sql);
-
-            # insert nodes used by this job if node tracking is enabled
             if ($conf{track}) {
-                my $job_id = get_last_insert_id ($dbh);
-                insert_job_nodes ($dbh, $job_id, $h{NodeList});
+                # insert the job, need to wait on the insert since we need the job_id
+                my $sql = "INSERT IGNORE INTO `$conf{db}`.`jobs` VALUES $values;";
+                if (not do_sql($dbh, $sql)) {
+                    $success = 0;
+                } else {
+                    # now insert nodes used by this job
+                    my $job_id = get_last_insert_id ($dbh);
+                    if (defined $job_id and $job_id != 0) {
+                        insert_job_nodes ($dbh, $job_id, $h{NodeList});
+                    }
+                }
+            } else {
+                # insert the job, no need to wait on it
+                my $sql = "INSERT DELAYED IGNORE INTO `$conf{db}`.`jobs` VALUES $values;";
+                if (not do_sql($dbh, $sql)) { $success = 0; }
             }
 
             # stop timer and print timing and progress as we go
@@ -1173,7 +1283,18 @@ sub backfill_slurm_joblog_table_to_v2
 
         close(IN);
     }
-    return 1;
+
+    # rebuild indicies
+    if ($conf{track} and not $conf{indicies}) {
+        my $rebuild = "ALTER TABLE `jobs_nodes`" .
+                      " ADD UNIQUE INDEX `job_node` (`job_id`,`node_id`)," .
+                      " ADD INDEX `node_id` (`node_id`);";
+        if (not do_sql ($dbh, $rebuild)) {
+            log_error ("Problem rebuilding node tracking indicies.\n");
+        }
+    }
+
+    return $success;
 }
 
 ####################
@@ -1181,17 +1302,12 @@ sub backfill_slurm_joblog_table_to_v2
 ####################
 
 # append records to file
-sub backup_slurm_joblog_table
+sub dump_slurm_joblog_table
 {
     my $version = shift @_;
     my $dbh     = shift @_;
+    my $joblog  = shift @_;
     my $success = 1;
-
-    # check that user gave us a file to write to
-    if (@_ != 1) {
-        log_fatal ("You must specify a filename to store backup to.\n");
-    }
-    my $joblog = shift @_;
 
     # switch to the slurm db
     if (not do_sql ($dbh, "USE $conf{db};")) { $success = 0; }
@@ -1199,37 +1315,73 @@ sub backup_slurm_joblog_table
     # check that we have a table to get data from
     if ($version > 1) {
         if (not table_exists ($dbh, "jobs")) {
-            log_msg ("backup: 'jobs' table does not exist.\n");
+            log_msg ("'jobs' table does not exist.\n");
             return 0;
         }
     } else {
         if (not table_exists ($dbh, "slurm_job_log")) {
-            log_msg ("backup: 'slurm_job_log' table does not exist.\n");
+            log_msg ("'slurm_job_log' table does not exist.\n");
             return 0;
+        }
+    }
+
+    # if prune is set, check that the date format is valid, and check that we're not also obfuscating
+    my $date = undef;
+    if (defined $conf{prune}) {
+        # can't prune and obfuscate at the same time
+        if ($conf{obfuscate}) {
+            log_fatal ("You cannot prune and obfuscate at the same time.\n");
+        }
+
+        # make sure the date is valid format
+        if ($conf{prune} !~ /^\d\d\d\d\-\d\d\-\d\d \d\d:\d\d:\d\d$/) {
+            log_fatal ("Invalid prune date: $conf{prune}.  Must be in --prune='yyyy-mm-dd hh:mm:ss' format.\n");
+        }
+
+        # ok, build out date qualifier
+        $date = "`starttime` < " . $dbh->quote($conf{prune});
+
+        # TODO: if tracking, remove indicies from jobs_nodes and add back after we're done?
+    } elsif (defined $conf{backup}) {
+        # make sure the date is valid format
+        if ($conf{backup} =~ /^all$/i) {
+            # nothing to do here
+        } elsif ($conf{backup} =~ /^(\d\d\d\d\-\d\d\-\d\d \d\d:\d\d:\d\d)$/) {
+            $date = "`starttime` < " . $dbh->quote($1);
+        } elsif ($conf{backup} =~ /^(\d\d\d\d\-\d\d\-\d\d \d\d:\d\d:\d\d)\.\.(\d\d\d\d\-\d\d\-\d\d \d\d:\d\d:\d\d)$/) {
+            $date = "`starttime` >= " . $dbh->quote($1) . " AND `starttime` < " . $dbh->quote($2);
+        } else {
+            log_fatal ("Invalid backup range: $conf{backup}.  Must be one of: \"all\", DATE, or DATE..DATE; where DATE is 'yyyy-mm-dd hh:mm:ss'.\n");
         }
     }
 
     # open our output file
     if (!open (JOBLOG, ">>$joblog")) {
-        log_fatal ("backup: Unable to open $joblog: $!\n");
+        log_fatal ("Unable to open $joblog: $!\n");
     }
 
     my $stmt = "";
 
-    # get the total count of jobs in the database (used to print percentage of progress)
+    # build a statement to get the total count of jobs in the database (used to print percentage of progress)
     my $total_count = 0;
     if ($version > 1) {
-        $stmt = "SELECT COUNT(*) FROM `jobs`;";
+        $stmt = "SELECT COUNT(*) FROM `jobs`";
     } else {
-        $stmt = "SELECT COUNT(*) FROM `slurm_job_log`;";
+        $stmt = "SELECT COUNT(*) FROM `slurm_job_log`";
     }
+    if (defined $date) { $stmt .= " WHERE $date"; }
+    $stmt .= " ORDER BY `starttime`,`id` ASC;";
+
+    # get the count
+    log_debug ("$stmt\n");
     my $sth_count = $dbh->prepare($stmt);
     if ($sth_count->execute()) {
         ($total_count) = $sth_count->fetchrow_array();
     }
     my $milemarker = int($total_count / 100);
+    if ($milemarker == 0) { $milemarker = 1; }
 
-    # now grab all of the jobs and append them one-by-one
+    # build a statement to select our records
     if ($version > 1) {
         $stmt = "SELECT" .
                 " `jobs`.*,`usernames`.`name` as `username`,`jobnames`.`name` as `jobname`," .
@@ -1238,14 +1390,20 @@ sub backup_slurm_joblog_table
                 " LEFT JOIN `usernames`  ON `jobs`.`username_id`  = `usernames`.`id`" .
                 " LEFT JOIN `jobnames`   ON `jobs`.`jobname_id`   = `jobnames`.`id`" .
                 " LEFT JOIN `jobstates`  ON `jobs`.`jobstate_id`  = `jobstates`.`id`" .
-                " LEFT JOIN `partitions` ON `jobs`.`partition_id` = `partitions`.`id`;";
+                " LEFT JOIN `partitions` ON `jobs`.`partition_id` = `partitions`.`id`";
     } else {
-        $stmt = "SELECT * FROM `slurm_job_log`;";
+        $stmt = "SELECT * FROM `slurm_job_log`";
     }
+    if (defined $date) { $stmt .= " WHERE $date"; }
+    $stmt .= " ORDER BY `starttime`,`id` ASC;";
+
+    # now grab all of the jobs and append them one-by-one
+    log_debug ("$stmt\n");
     my $sth_all_jobs = $dbh->prepare($stmt);
     if ($sth_all_jobs->execute()) {
         my $count = 0;
         my $time_sum = 0;
+
         while (my $h = $sth_all_jobs->fetchrow_hashref()) {
             # start timer
             my ($start_secs, $start_micros) = gettimeofday();
@@ -1268,11 +1426,35 @@ sub backup_slurm_joblog_table
                 $procs = $$h{'nodecount'} * $conf{cores};
             }
 
+            # optionally obfuscate username, userid, and jobname
+            my $username = $$h{'username'};
+            my $userid   = $$h{'userid'};
+            my $jobname  = $$h{'jobname'};
+            if ($conf{obfuscate} and not defined $conf{prune}) {
+               # obfuscate username
+               if (not defined $obfuscate{usernames}{$username}) {
+                   $num_users++;
+                   $obfuscate{usernames}{$username} = $num_users;
+               }
+               $username = "user_" . $obfuscate{usernames}{$username};
+
+               # obfuscate userid
+               $userid = $num_users;
+
+               # obfuscate jobname
+               if (not defined $obfuscate{jobnames}{$jobname}) {
+                   $num_jobs++;
+                   $obfuscate{jobnames}{$jobname} = $num_jobs;
+               }
+               $jobname = "job_" . $obfuscate{jobnames}{$jobname};
+            }
+
+            # append record to file
             my @params = ();
             push @params, $$h{'jobid'};
-            push @params, $$h{'username'};
-            push @params, $$h{'userid'};
-            push @params, $$h{'jobname'};
+            push @params, $username;
+            push @params, $userid;
+            push @params, $jobname;
             push @params, $$h{'jobstate'};
             push @params, $$h{'partition'};
             push @params, $$h{'timelimit'};
@@ -1293,6 +1475,26 @@ sub backup_slurm_joblog_table
                   "NodeCnt=%s\n", @params;
             }
 
+            # if we are pruning, delete the job and any associated records
+            if (defined $conf{prune}) {
+                my $id = $$h{'id'};
+                if (defined $id) {
+                    my $q_job_id = $dbh->quote($id);
+
+                    # if tracking, first delete all node records
+                    if ($version > 1 and $conf{track}) {
+                        do_sql ($dbh, "DELETE FROM `jobs_nodes` WHERE `job_id` = $q_job_id;");
+                    }
+
+                    # now delete the job record
+                    if ($version > 1) {
+                        do_sql ($dbh, "DELETE FROM `jobs` WHERE `id` = $q_job_id;");
+                    } else {
+                        do_sql ($dbh, "DELETE FROM `slurm_job_log` WHERE `id` = $q_job_id;");
+                    }
+                }
+            }
+
             # stop timer and print timing and progress as we go
             my ($end_secs, $end_micros) = gettimeofday();
             my $micros = ($end_secs * 1000000 + $end_micros) - ($start_secs * 1000000 + $start_micros);
@@ -1300,11 +1502,14 @@ sub backup_slurm_joblog_table
             $count++;
             if ($count % $milemarker == 0) {
                 my $avg_time = int($time_sum / $count);
-                my $perc = sprintf("%.0f", $count / $total_count * 100);
-                log_msg ("Records backed up $count ($perc%): $avg_time usec / record\n");
+                my $perc = "";
+                if ($total_count > 0) { $perc = sprintf("%.0f", $count / $total_count * 100); }
+                log_msg ("Records written $count ($perc%): $avg_time usec / record\n");
                 $time_sum = 0;
             }
         }
+
+        log_msg ("Wrote $count jobs to $joblog.\n");
     } else {
         # select against version 1 table failed
         $success = 0;

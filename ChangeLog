@@ -1,3 +1,17 @@
+2008-03-13 Adam Moody <moody20@llnl.gov>
+
+	* sqlog : Added logic to track nodes and query records by node name
+	  via SQL commands.
+
+	* sqlog-db-util : Added --backup, --prune, --cores, --obfuscate,
+	  --notrack, and --delay-index options.  Changed --drop to --drop=V.
+	  Created usernames, jobnames, jobstates, and partitions tables
+	  to reduce record length in new jobs table.  Added indicies on
+	  jobnames, starttime, endtime, runtime, nodecount, corecount to
+	  speed up such queries.  Added nodes table to assign each node name
+	  to an id, and created a jobs_nodes table that maps node ids to
+	  job ids.
+
 2008-03-03 Adam Moody <moody20@llnl.gov>
 
 	* sqlog : Added --ncores, --maxcores, and --mincores options to display

@@ -31,7 +31,7 @@ my @SLURMvars = qw(JOBID UID JOBNAME JOBSTATE PARTITION LIMIT START END NODES PR
 #  List of parameters (in order) to pass to SQL execute command below.
 #  
 my @params    = qw(jobid username uid jobname jobstate partition limit
-		           start end nodes nodecount corecount);
+		           start end nodes nodecount procs);
 
 # 
 #  Set up SQL parameters
@@ -249,6 +249,10 @@ sub read_id
     my $name  = shift @_;
 
     my $id = undef;
+
+    # if name is not set, don't try to look it up in hash, just return undef
+    if (not defined $name) { return $id; }
+
     if (not defined $IDcache{$table}) { %{$IDcache{$table}} = (); }
     if (not defined $IDcache{$table}{$name}) {
         my $q_name = $dbh->quote($name);
@@ -278,19 +282,24 @@ sub read_write_id
     my $name  = shift @_;
 
     # attempt to read the id first, if not found, insert it and return the last insert id
-    my $id = read_id($dbh, $table, $name);
+    my $id = read_id ($dbh, $table, $name);
     if (not defined $id) {
         my $q_name = $dbh->quote($name);
         my $sql = "INSERT IGNORE INTO `$table` (`id`,`name`) VALUES (NULL,$q_name);";
         my $sth = $dbh->prepare($sql);
         if ($sth->execute ()) {
-            $id = get_last_insert_id($dbh);
-            if (not defined $id or $id == 0) {
+            # user read_id here instead of get_last_insert_id to avoid race conditions
+            $id = read_id ($dbh, $table, $name);
+            if (not defined $id) {
+                log_error ("Error inserting new record (id undefined): $sql\n");
+                $id = 0;
+            } elsif ($id == 0) {
                 log_error ("Error inserting new record (id=0): $sql\n");
+                $id = 0;
             }
-            $IDcache{$table}{$name} = $id;
         } else {
             log_error ("Error inserting new record: $sql --> " . $dbh->errstr . "\n");
+            $id = 0;
         }
     }
 
@@ -396,7 +405,7 @@ sub insert_job_nodes
 
         # if we have any nodes for this job, insert them
         if (@values > 0) {
-            my $sql = "INSERT IGNORE INTO `jobs_nodes` (`job_id`,`node_id`) VALUES " . join(",", @values) . ";";
+            my $sql = "INSERT DELAYED IGNORE INTO `jobs_nodes` (`job_id`,`node_id`) VALUES " . join(",", @values) . ";";
             my $sth = $dbh->prepare($sql);
             if (not $sth->execute ()) {
                 log_error ("Inserting jobs_nodes records for job id $job_id: $sql --> " . $dbh->errstr . "\n");
@@ -430,8 +439,8 @@ sub value_string_v2
     # given start and end times, compute the number of seconds the job ran for
     # TODO: unsure whether this correctly handles jobs that straddle DST changes
     my $seconds = 0;
-    if (defined $h->{StartTime} and $h->{StartTime} !~ /^\s+$/ and
-        defined $h->{EndTime}   and $h->{EndTime}   !~ /^\s+$/)
+    if (defined $h->{StartTime} and $h->{StartTime} !~ /^\s*$/ and
+        defined $h->{EndTime}   and $h->{EndTime}   !~ /^\s*$/)
     {
          my $start = get_seconds($h->{StartTime});
          my $end   = get_seconds($h->{EndTime});
@@ -516,8 +525,8 @@ sub append_job_db
         $h{JobState}  = $conf{jobstate};
         $h{Partition} = $conf{partition};
         $h{TimeLimit} = $conf{limit};
-        $h{StartTime} = convert_db("start");
-        $h{EndTime}   = convert_db("end");
+        $h{StartTime} = convtime_db("start");
+        $h{EndTime}   = convtime_db("end");
         $h{NodeList}  = $conf{nodes};
         $h{NodeCnt}   = $conf{nodecount};
         $h{Procs}     = $conf{procs};
@@ -535,7 +544,9 @@ sub append_job_db
         # insert nodes used by this job if node tracking is enabled
         if ($conf{track}) {
             my $job_id = get_last_insert_id ($dbh);
-            insert_job_nodes ($dbh, $job_id, $h{NodeList});
+            if (defined $job_id and $job_id != 0) {
+                insert_job_nodes ($dbh, $job_id, $h{NodeList});
+            }
         }
     } elsif ($conf{version}{1}) {
         # insert into v1 schema

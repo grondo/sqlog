@@ -81,7 +81,7 @@ The database schema changed from v0.12 to v0.13 of the sqlog package.
 The highest schema version currently running on a system can be
 determined from the --info output.
 
-To create the new schema, run:
+To create tables for the new schema, run:
 
  sqlog-db-util --create
 
@@ -89,26 +89,62 @@ Once created, the slurm-joblog.pl script will detect the new schema
 and automatically switch to insert records to the new tables.  The sqlog command
 will query both schemas for records.
 
-To convert an existing database from the older schema to the newer version,
-use the --convert option.  The new schema adds a new field to record the number
-of cores allocated to a job.  This data was not captured in the version 1 schema.
-However, on many systems, it can be computed.
+To copy existing data from the old schema to the new schema,
+use the --convert option.
 
-On systems that have the same number of cores per node and allocate whole
-nodes to a job, one may use the --ppn option to specify the number of cores
-per node.  This --ppn value is multiplied with the node count recorded in
-the version 1 schema to determine the number of cores allocated to the job.
-For example, to convert from schema version 1 to version 2 on a
-machine that has 8 cores per node and allocates whole nodes to jobs,
-run the following command:
+Speeding up the conversion:
+  The new schema tracks the nodes that each job uses so that sqlog queries
+  involving nodes names return much faster.  The data and indicies associated
+  with this node tracking can significantly slow down the conversion operation
+  when converting a large number of records.  There are two options to speed
+  this up:
 
- sqlog-db-util --convert --ppn=8
+    1) Disable node-tracking for all converted jobs via the --notrack option.
+    2) Delay indexing of converted data via the --delay-index option.
 
-For all other systems, do not specify --ppn.  In this case, the number of
-cores allocated will be set to 0.  The conversion command on these systems
-is simply:
+  With the --notrack option, no node-tracking data will be stored for all
+  jobs inserted via conversion.  As such, if node-tracking is enabled on the
+  system, such jobs will not return in queries involving node names.  Newly
+  inserted jobs will still have node-tracking data.
 
- sqlog-db-util --convert
+  With the --delay-index option, node tracking indicies are removed before
+  data is converted, and they are restored when the conversion completes.
+  Queries involving node names while there are no indicies will take a very
+  long time to return on a large database.
+
+  For a database on Atlas, which had 580,000 jobs spanning two years the
+  conversion took:
+
+    13 minutes for:  sqlog-db-util --convert --notrack
+    33 minutes for:  sqlog-db-util --convert --delay-index
+    85 minutes for:  sqlog-db-util --convert
+
+  The recommended method is to use --delay-index.
+
+  It's also possible to disable node-tracking in the new schema completely.
+  To do this, add the following line to the sqlog.conf file.
+
+    $TRACKNODES=0;
+ 
+Number of allocated cores:
+  The new schema adds a new field to record the number of cores
+  allocated to a job.  This data was not captured in the version 1 schema.
+  However, on many systems, this core count can be computed.
+  On systems that have the same number of cores per node and allocate whole
+  nodes to a job, one may use the --cores option to specify the number of cores
+  per node.  This --cores value is multiplied with the node count recorded in
+  the version 1 schema to determine the number of cores allocated to the job.
+  For example, to convert from schema version 1 to version 2 on a
+  machine that has 8 cores per node and allocates whole nodes to jobs,
+  run the following command:
+
+    sqlog-db-util --convert --ppn=8
+
+  For all other systems, do not specify --cores.  In this case, the number of
+  cores allocated will be set to 0.  The conversion command on these systems
+  is simply:
+
+    sqlog-db-util --convert
 
 If a mistake is made during conversion, you can drop the version 2 tables
 and start from scratch (be careful to specify '2' and not '1' here):
@@ -127,6 +163,14 @@ it's recommended that the version 1 tables be dropped by running the
 following command (be careful to specify '1' and not '2' here):
 
  sqlog-db-util --drop=1
+
+Finally, an example set of commands to create and convert to the new
+schema:
+
+  sqlog-db-util -v --create
+  sqlog-db-util -v --backup=all schema1_jobs.log
+  sqlog-db-util -v --convert --delay-index --cores=8
+  sqlog-db-util -v --drop=1
 
 ENABLE JOB LOGGING
 
