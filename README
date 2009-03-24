@@ -3,27 +3,27 @@ populating, and issuing queries to a SLURM job log database.
 
 COMPONENTS
 
- sqlog          The "SLURM Query Log" utility. Provides a single interface to
-                query jobs from the SLURM job log database and/or current 
-                queue of running jobs.
+  sqlog          The "SLURM Query Log" utility. Provides a single interface to
+                 query jobs from the SLURM job log database and/or current 
+                 queue of running jobs.
 
- slurm-joblog   Logs completed jobs using SLURM's jobcomp/script interface
-                to the SLURM job log database and an optional text file.
+  slurm-joblog   Logs completed jobs using SLURM's jobcomp/script interface
+                 to the SLURM job log database and an optional text file.
 
  
- sqlog-db-util  Administrative utility used to create SLURM job log database
-                and its corresponding users. Also provides an interface to
-                "backfill" the database using existing SLURM joblog files
-                created by the jobcomp/filetxt plugin.
+  sqlog-db-util  Administrative utility used to create SLURM job log database
+                 and its corresponding users. Also provides an interface to
+                 "backfill" the database using existing SLURM joblog files
+                 created by the jobcomp/filetxt plugin.
 
- sqlog.conf     World-readable config file. Contains local configuration for
-                SQL host, read-only user, and read-only password.
+  sqlog.conf     World-readable config file. Contains local configuration for
+                 SQL host, read-only user, and read-only password.
  
- slurm-joblog.conf
-                Private configuration for slurm-joblog script (also used by 
-                by sqlog-db-util). Contains SQL read-write user and password,
-                root user passwd (for sqlog-db-util) and a list of hosts
-		that should have RW access to DB.
+  slurm-joblog.conf
+                 Private configuration for slurm-joblog script (also used by 
+                 by sqlog-db-util). Contains SQL read-write user and password,
+                 root user passwd (for sqlog-db-util) and a list of hosts
+                 that should have RW access to DB.
          
  
 CONFIGURATION
@@ -36,24 +36,24 @@ This allows a bit of scripting to get the values if necessary.
 
 The available variables in each config file include:
 
- sqlog.conf:
+  sqlog.conf:
 
- SQLHOST          SQL server hostname (default = sqlhost)
- SQLUSER          Read-only user      (default = slurm_read)
- SQLPASS          Read-only password  (default = none)
- SQLDB            DB name             (default = slurm)
- TRACKNODES       Set to 0 to disable per-job node tracking (default = 1)
- %FORMATS         Hash of format aliases (e.g. "f1" => "jid,name,user,state")
+  SQLHOST          SQL server hostname (default = sqlhost)
+  SQLUSER          Read-only user      (default = slurm_read)
+  SQLPASS          Read-only password  (default = none)
+  SQLDB            DB name             (default = slurm)
+  TRACKNODES       Set to 0 to disable per-job node tracking (default = 1)
+  %FORMATS         Hash of format aliases (e.g. "f1" => "jid,name,user,state")
 
- slurm-joblog.conf:
+  slurm-joblog.conf:
 
- SQLUSER          Read-write user     (default = slurm)
- SQLPASS          Read-write password (not set)
- SQLROOTPASS      DB root password    (not set)
- @SQLRWHOSTS      Read-write hosts    (array of hosts to give rw access)
- JOBLOGFILE       txt joblog location (set if you want to log to a file too)
- AUTOCREATE       Attempt to create DB if it doesn't yet exist the
-                  first time slurm-joblog is run (default = no).
+  SQLUSER          Read-write user     (default = slurm)
+  SQLPASS          Read-write password (not set)
+  SQLROOTPASS      DB root password    (not set)
+  @SQLRWHOSTS      Read-write hosts    (array of hosts to give rw access)
+  JOBLOGFILE       txt joblog location (set if you want to log to a file too)
+  AUTOCREATE       Attempt to create DB if it doesn't yet exist the
+                   first time slurm-joblog is run (default = no).
 
 
 CREATING JOB LOG DATABASE
@@ -66,11 +66,11 @@ SLURM job log database:
 If you have existing text joblog files you'd like to seed the new
 DB with, use 
 
- sqlog-db-util --backfill [FILE]...
+  sqlog-db-util --backfill [FILE]...
 
 e.g.
 
- sqlog-db-util --backfill /var/log/slurm/joblog*
+  sqlog-db-util --backfill /var/log/slurm/joblog*
 
 If AUTOCREATE is set in slurm-joblog.conf, then sqlog-db-util --create
 will be automatically run the first time the database is accessed.
@@ -83,7 +83,7 @@ determined from the --info output.
 
 To create tables for the new schema, run:
 
- sqlog-db-util --create
+  sqlog-db-util --create
 
 Once created, the slurm-joblog.pl script will detect the new schema
 and automatically switch to insert records to the new tables.  The sqlog command
@@ -102,8 +102,8 @@ Speeding up the conversion:
     1) Disable node-tracking for all converted jobs via the --notrack option.
     2) Delay indexing of converted data via the --delay-index option.
 
-  With the --notrack option, no node-tracking data will be stored for all
-  jobs inserted via conversion.  As such, if node-tracking is enabled on the
+  With the --notrack option, no node-tracking data will be stored for jobs
+  inserted via conversion.  As such, if node-tracking is enabled on the
   system, such jobs will not return in queries involving node names.  Newly
   inserted jobs will still have node-tracking data.
 
@@ -138,7 +138,7 @@ Number of allocated cores:
   machine that has 8 cores per node and allocates whole nodes to jobs,
   run the following command:
 
-    sqlog-db-util --convert --ppn=8
+    sqlog-db-util --convert --cores=8
 
   For all other systems, do not specify --cores.  In this case, the number of
   cores allocated will be set to 0.  The conversion command on these systems
@@ -147,9 +147,9 @@ Number of allocated cores:
     sqlog-db-util --convert
 
 If a mistake is made during conversion, you can drop the version 2 tables
-and start from scratch (be careful to specify '2' and not '1' here):
+and start from scratch (be very careful to specify '2' and not '1' here):
 
- sqlog-db-util --drop=2
+  sqlog-db-util --drop=2
 
 You may issue the --convert command on a live system, however, be
 careful to specify the command correctly in this case.  The slurm-joblog.pl
@@ -160,25 +160,52 @@ be dropped and recreated, any records inserted by slurm-joblog.pl will be lost.
 After conversion, sqlog may report duplicate records as it finds
 matches from both the version 1 and version 2 tables.  Once converted,
 it's recommended that the version 1 tables be dropped by running the
-following command (be careful to specify '1' and not '2' here):
+following command (be very careful to specify '1' and not '2' here):
 
- sqlog-db-util --drop=1
+  sqlog-db-util --drop=1
 
-Finally, an example set of commands to create and convert to the new
-schema:
+Finally, here is a full example set of commands to create the new schema
+and convert records to it:
 
   sqlog-db-util -v --create
   sqlog-db-util -v --backup=all schema1_jobs.log
   sqlog-db-util -v --convert --delay-index --cores=8
   sqlog-db-util -v --drop=1
 
+BACKING UP AND PRUNING THE DATABASE
+
+It is possible to dump records from the job log database into a text
+file, which can then be read in via --backfill.  This is useful to
+capture a text file backup of the logs.  One must specify the time
+period as either "all", "DATE", or "DATE..DATE", to dump all jobs,
+jobs before a given date, and jobs that started between two dates,
+respectively.  DATE should be specified with the 'YYYY-MM-DD HH:MM:SS'
+format, e.g.,
+
+  sqlog-db-util -v --backup='2009-01-01 00:00:00'..'2009-02-01 00:00:00' logs.txt
+
+One utility of this backup option is to share job log records with
+others potentially outside of the organization.  Typically, one would
+like to protect user and job names when sharing such information.
+For this, an --obfuscate option is available which dumps records and
+modifies user names to be of the form "user_X", userids to match "X",
+and job names to be of the form "job_Y", where X and Y are numbers.
+
+Finally, over a long period of time, the database may gather so many
+records that is slows down significantly.  A --prune option is available
+to remove old records.  One specifies a date, and all jobs which started
+before that date will be removed from the database and writte to a file
+name specified by the user, e.g.,
+
+  sqlog-db-util -v --prune='2007-01-01 00:00:00' pre2007.log
+
 ENABLE JOB LOGGING
 
 To enable the SLURM job log database, the following configuration
 options must be set in slurm.conf:
 
- JobCompType = jobcomp/script
- JobCompLoc = /usr/libexec/sqlog/slurm-joblog
+  JobCompType = jobcomp/script
+  JobCompLoc = /usr/libexec/sqlog/slurm-joblog
 
 Adjust the path if the sqlog RPM was installed with a different PREFIX.
 This has only been tested on SLURM 1.2.10 or greater.
