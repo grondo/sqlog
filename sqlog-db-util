@@ -42,29 +42,37 @@ logfiles.
     -i, --info         Print information about current DB.
     -v, --verbose      Be verbose.
     -d, --drop=V       Drop tables for version V={1,2} of database schema.
-    -c, --create       Create slurm database, slurm & slurm_read users, and table.
-    -b, --backfill     Backfill database from SLURM joblog files in ARGV.
-                       Also see --cores.
+    -c, --create       Create slurm database, users, and latest version
+                        of database tables.
+    -b, --backfill     Backfill database from all SLURM joblog files in ARGV.
     -x, --convert      Convert data from database schema version 1 to version 2.
-                       Also see --cores.
-    -B, --backup=RANGE Copy data from tables to a file (readable by --backfill).
-                       Specify records via a range of job start times.  RANGE can be any
-                       of: "all", DATE, or DATE..DATE; where DATE is 'yyyy-mm-dd hh:mm:ss',
-                       to specify all jobs, all jobs with a start time older than DATE,
-                       or all jobs with a start time between DATE..DATE, respectively.
-                       Also see --cores and --obfuscate.
-    -o, --obfuscate    Obfuscates usernames, userids, and jobnames during backup operations,
-                       which is useful for sharing system joblogs with offsite collaborators.
-    -p, --prune=DATE   Prune database of all jobs with start times older than DATE; write such
-                       records to a file.  DATE must be in format of 'yyyy-mm-dd hh:mm:ss'
-                       Also see --cores.
-    -C, --cores=N      During backfill, convert, backup, or prune, specify the number of cores
-                       per node to compute corecount field on clusters that allocate whole
+
+    -B, --backup=RANGE Copy data from tables over RANGE to a file in a format 
+                       readable by the --backfill option. RANGE can be 
+                       specified as "all" or a date range in the form
+                       DATE..DATE. DATE must be in a format of
+                       'yyyy-mm-dd hh:mm:ss'.
+                       
+    -o, --obfuscate    Obfuscates usernames, userids, and jobnames during
+                       backup operations, which is useful for sharing system
+                       joblogs with offsite collaborators.
+
+    -p, --prune=DATE   Prune database of all jobs with start times older 
+                       than DATE; write such records to a file.  DATE must 
+                       be in format of 'yyyy-mm-dd hh:mm:ss'
+
+    -C, --cores-per-node=N       
+                       During --backfill, --convert, --backup, or --prune, 
+                       specify the number of cores per node used to compute 
+                       corecount field on clusters that allocate whole
                        nodes to jobs.
-    --notrack          Disable per-job node tracking for jobs inserted during convert
-                       or backfill operations.
+
+    --notrack          Disable per-job node tracking for jobs inserted during 
+                       --convert or --backfill operations.
+
     --delay-index      Temporarily disable node tracking indicies for jobs inserted during
                        convert of backfill operations.
+
     -L, --localhost    Connect to DB over localhost instead of configured SQL host.
 
 EOF
@@ -123,14 +131,17 @@ GetOptions (
    "backup|B=s"     => \$conf{backup},
    "obfuscate|o"    => \$conf{obfuscate},
    "prune|p=s"      => \$conf{prune},
-   "cores|C=i"      => \$conf{cores},
+   "cores-per-node|C=i"  => \$conf{cores},
    "notrack"        => sub { $conf{track} = 0; },
    "delay-index"    => sub { $conf{indicies} = 0; },
    "localhost|L"    => \$conf{localhost},
 ) or usage ();
 
-if (!$conf{create} && !$conf{convert} && !$conf{drop} && !$conf{backfill} && !$conf{backup} && !$conf{prune} && !$conf{info} && !$conf{help}) {
-    log_error ("Specify at least one of --{create,convert,drop,backfill,backup,prune,info}.\n");
+if (!$conf{create} && !$conf{convert} && !$conf{drop} && 
+    !$conf{backfill} && !$conf{backup} && !$conf{prune} && 
+    !$conf{info} && !$conf{help}) {
+    log_error ("Specify at least one of " . 
+               "--{create,convert,drop,backfill,backup,prune,info}.\n");
     usage ();
 }
 
@@ -150,6 +161,7 @@ my $dbh = connect_db_rw ();
 my %obfuscate = ();
 my $num_users = 0;
 my $num_jobs  = 0;
+
 if ($conf{backup} or defined $conf{prune}) { 
     # check that we have a db connection
     if (!$dbh) {
@@ -171,7 +183,9 @@ if ($conf{backup} or defined $conf{prune}) {
     }
 }
 
-# drop existing database
+#
+#  Drop existing tables
+#
 if ($conf{drop}) {
     if ($dbh) {
         if ($conf{drop} == 1) {
@@ -187,10 +201,13 @@ if ($conf{drop}) {
     } else {
         log_verbose ("drop: No existing slurm DB to drop\n");
     }
-    # TODO: should we also delete the slurm db and users (i.e., undo everything create does?)
+    # TODO: should we also delete the slurm db and users 
+    #  (i.e., undo everything create does?)
 }
 
-# create database
+#
+#  Create database
+#
 if ($conf{create} && $dbh) {
     # if version 2 tables do not exist, create them
     if (not table_exists ($dbh, "jobs")) {
@@ -212,10 +229,18 @@ if ($conf{create} && $dbh) {
         or log_fatal ("create: Failed to connect to SLURM DB after create!\n");
 }
 
-# convert slurm_job_log table to version 2 (add corecount and extend nodelist columns)
+# 
+# Convert slurm_job_log table to version 2 
+#  (add corecount and extend nodelist columns)
+#
 if ($conf{convert}) {
-    # attempt to convert table to version 2, if conversion fails, print an error
-    # if the table has already been converted, a message is printed and no action is taken
+    #
+    #  Attempt to convert table to version 2, if conversion fails 
+    #   print an error. 
+    #
+    #  If the table has already been converted, a message is printed 
+    #   and no action is taken
+    #
     if (!$dbh) {
         log_fatal ("convert: Conversion requested, but connection to database failed.\n")
     }
@@ -225,7 +250,9 @@ if ($conf{convert}) {
     }
 }
 
-# optionally backfill from logfiles
+#
+#  Backfill from logfiles
+#
 if ($conf{backfill}) { 
     if (!$dbh) {
         log_fatal ("backfill: Backfill requested, but connection to database failed!\n")

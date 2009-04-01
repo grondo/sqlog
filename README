@@ -127,22 +127,22 @@ Speeding up the conversion:
     $TRACKNODES=0;
  
 Number of allocated cores:
-  The new schema adds a new field to record the number of cores
-  allocated to a job.  This data was not captured in the version 1 schema.
-  However, on many systems, this core count can be computed.
-  On systems that have the same number of cores per node and allocate whole
-  nodes to a job, one may use the --cores option to specify the number of cores
-  per node.  This --cores value is multiplied with the node count recorded in
-  the version 1 schema to determine the number of cores allocated to the job.
-  For example, to convert from schema version 1 to version 2 on a
-  machine that has 8 cores per node and allocates whole nodes to jobs,
+  The new schema adds a new field to record the number of cores allocated
+  to a job.  This data was not captured in the version 1 schema.  However,
+  on many systems, this core count can be computed.  On systems that have the
+  same number of cores per node and allocate whole nodes to a job, one may
+  use the --cores-per-node option to specify the number of cores per node.
+  This --cores-per-node value is multiplied with the node count recorded
+  in the version 1 schema to determine the number of cores allocated to
+  the job.  For example, to convert from schema version 1 to version 2 on
+  a machine that has 8 cores per node and allocates whole nodes to jobs,
   run the following command:
 
-    sqlog-db-util --convert --cores=8
+    sqlog-db-util --convert --cores-per-node=8
 
-  For all other systems, do not specify --cores.  In this case, the number of
-  cores allocated will be set to 0.  The conversion command on these systems
-  is simply:
+  For all other systems, do not specify --cores-per-node.  In this case,
+  the number of cores allocated will be set to 0.  The conversion command
+  on these systems is simply:
 
     sqlog-db-util --convert
 
@@ -169,7 +169,7 @@ and convert records to it:
 
   sqlog-db-util -v --create
   sqlog-db-util -v --backup=all schema1_jobs.log
-  sqlog-db-util -v --convert --delay-index --cores=8
+  sqlog-db-util -v --convert --delay-index --cores-per-node=8
   sqlog-db-util -v --drop=1
 
 BACKING UP AND PRUNING THE DATABASE
@@ -182,7 +182,8 @@ jobs before a given date, and jobs that started between two dates,
 respectively.  DATE should be specified with the 'YYYY-MM-DD HH:MM:SS'
 format, e.g.,
 
-  sqlog-db-util -v --backup='2009-01-01 00:00:00'..'2009-02-01 00:00:00' logs.txt
+  sqlog-db-util -v --backup='2009-01-01 00:00:00'..'2009-02-01 00:00:00'\ 
+    logs.txt
 
 One utility of this backup option is to share job log records with
 others potentially outside of the organization.  Typically, one would
@@ -194,7 +195,7 @@ and job names to be of the form "job_Y", where X and Y are numbers.
 Finally, over a long period of time, the database may gather so many
 records that is slows down significantly.  A --prune option is available
 to remove old records.  One specifies a date, and all jobs which started
-before that date will be removed from the database and writte to a file
+before that date will be removed from the database and written to a file
 name specified by the user, e.g.,
 
   sqlog-db-util -v --prune='2007-01-01 00:00:00' pre2007.log

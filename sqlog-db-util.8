@@ -43,10 +43,11 @@ read-only and read-write users.
 Backfill the database with SLURM job information using the list of files
 provided on the command line. Files should be in the format created by
 SLURM's jobcomp/filetxt plugin. If the files end in .gz, they will be
-automatically unzipped at runtime.  Also see --cores.
+automatically unzipped at runtime.  Also see --cores-per-node.
 .TP
 .BI "-x, --convert"
-Convert data from database schema version 1 to version 2.  Also see --cores.
+Convert data from database schema version 1 to version 2.  Also see 
+--cores-per-node.
 .TP
 .BI "-B, --backup=RANGE"
 Copy data from tables to a file (readable by --backfill).
@@ -54,7 +55,7 @@ Specify records via a range of job start times.  RANGE can be any
 of: "all", DATE, or DATE..DATE; where DATE is 'yyyy-mm-dd hh:mm:ss',
 to specify all jobs, all jobs with a start time older than DATE,
 or all jobs with a start time between DATE..DATE, respectively.
-Also see --cores and --obfuscate.
+Also see --cores-per-node and --obfuscate.
 .TP
 .BI "-o, --obfuscate"
 Obfuscate usernames, userids, and jobnames during a backup operation.
@@ -62,14 +63,14 @@ This is useful when sharing joblogs with outside collaborators.
 .TP
 .BI "-p, --prune=DATE"
 Prune database of all jobs with start times older than DATE; write such records to a file.
-DATE must be in format of 'yyyy-mm-dd hh:mm:ss'.  Also see --cores.
+DATE must be in format of 'yyyy-mm-dd hh:mm:ss'.  Also see --cores-per-node.
 .TP
-.BI "-C, --cores=N"
+.BI "-C, --cores-per-node=N"
 The version 1 schema did not record the number of cores allocated to a job.
 For systems that allocate whole nodes to jobs and have the same number of
 cores per node, the number of cores allocated to a job can be computed
 by multiplying the number of node allocated to a job by the number of
-cores per node.  On such systems, use the --cores option to specify the
+cores per node.  On such systems, use the --cores-per-node option to specify the
 number of cores per node.  This option can be used during --convert,
 --backfill, and --backup operations.
 .TP

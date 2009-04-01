@@ -1,4 +1,12 @@
-2008-03-13 Adam Moody <moody20@llnl.gov>
+2009-04-01 Mark Grondona <mgrondona@llnl.gov>
+
+	* sqlog-db-util, sqlog-db-util.8, README :
+	  Rename --cores option to --cores-per-node.
+
+	* sqlog-db-util : 
+	  Reformat --help output and comments to fit in 80 characters.
+
+2009-03-13 Adam Moody <moody20@llnl.gov>
 
 	* sqlog : Added logic to track nodes and query records by node name
 	  via SQL commands.
