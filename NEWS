@@ -1,3 +1,7 @@
+Version 0.12.1 (2009-04-01):
+ - Fix bug in SQL statement generation which broke the functionality
+   of the -x, --exclude option to sqlog(1).
+
 Version 0.12 (2008-12-03):
  - Do not use Date::Manip routines to convert dates to "Unix time"
    (seconds since epoch) Date::Manip doesn't handle daylight savings 
