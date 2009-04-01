@@ -1114,7 +1114,7 @@ sub stmt_list
     for my $name (keys %names) {
         my $list = $excluded ? \@{$conf{exclude}{$name}} : \@{$conf{$name}};
         next unless @$list;
-        push (@result, "$names{$name} $in " . quote_list ($dbh, @$list));
+        push (@result, "$names{$name} $operator " . quote_list ($dbh, @$list));
     }
 
     return (@result);
