@@ -1002,7 +1002,7 @@ sub get_seconds_date_manip_is_buggy
     my $m = UnixDate ($date, "%m") - 1;
     my $y = UnixDate ($date, "%Y") - 1900;
 
-    &log_verbose ("timelocal ($S, $M, $H, $d, $m, $y)\n");
+    &log_debug ("timelocal ($S, $M, $H, $d, $m, $y)\n");
 
     return timelocal ($S, $M, $H, $d, $m, $y);
 }

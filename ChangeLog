@@ -1,5 +1,8 @@
 2009-04-01 Mark Grondona <mgrondona@llnl.gov>
 
+	* sqlog : Change timelocal debug output from log_verbose
+	  to log_debug.
+
 	* sqlog : Use $operator instead of $in when generating
 	  SQL statements. $operator contains the NOT keyword if
 	  the user passed -x, --exclude on the command line.
