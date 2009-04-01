@@ -70,10 +70,11 @@ logfiles.
     --notrack          Disable per-job node tracking for jobs inserted during 
                        --convert or --backfill operations.
 
-    --delay-index      Temporarily disable node tracking indicies for jobs inserted during
-                       convert of backfill operations.
+    --delay-index      Temporarily disable node tracking indicies for jobs 
+                       inserted during convert of backfill operations.
 
-    -L, --localhost    Connect to DB over localhost instead of configured SQL host.
+    -L, --localhost    Connect to DB over localhost instead of configured 
+                       SQL host.
 
 EOF
 ;
