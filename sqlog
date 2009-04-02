@@ -124,10 +124,10 @@ $conf{sqlpass}    = "";
 $conf{sqlhost}    = "sqlhost";  
 $conf{confdir}    = "/etc/slurm";
 
-# enables / disables node tracking per job in version 2 schema
-$conf{track} = 1;
+#   Enables / disables node tracking per job in version 2 schema
+$conf{track}      = 1;
 
-# assume neither version 1 nor version 2 are available
+#   Assume neither version 1 nor version 2 are available
 $conf{version}{1} = 0;
 $conf{version}{2} = 0;
 

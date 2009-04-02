@@ -1,4 +1,4 @@
-Version 0.13 (2009-04-01):
+Version 0.13 (2009-04-02):
  - Update database schema from v1 to v2.
  - Added --covert, --backup, --prune, --obfuscate options to
    sqlog-db-util, as well as, --cores-per-node, --notrack,
