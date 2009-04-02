@@ -26,8 +26,8 @@
 2008-03-03 Adam Moody <moody20@llnl.gov>
 
 	* sqlog : Added --ncores, --maxcores, and --mincores options to display
-	  and sort jobs based on number of processors used (PROCS field from SLURM
-	  job log).
+	  and sort jobs based on number of processors used (PROCS field from 
+	  SLURM job log).
 
 	* sqlog-db-util : Added -x, --convert options to convert existing
 	  slurm_job_log tables to version 2 (adds procs column and extends
