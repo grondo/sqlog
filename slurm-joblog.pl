@@ -101,6 +101,7 @@ sub log_msg
 sub log_error
 {
     log_msg "$prog: Error: ", @_;
+    return undef
 }
 
 sub log_fatal
@@ -118,8 +119,8 @@ sub read_config
     # First read sqlog config to get SQLHOST and SQLDB
     #  (ignore SQLUSER)
     unless (my $rc = do $ro) {
-        log_fatal ("Couldn't parse $ro: $@\n") if $@;
-        log_fatal ("couldn't run $ro\n") if (defined $rc && !$rc);
+        return log_error ("Couldn't parse $ro: $@\n") if $@;
+        return log_error ("couldn't run $ro\n") if (defined $rc && !$rc);
     }
     $conf{sqlhost} = $conf::SQLHOST if (defined $conf::SQLHOST);
     $conf{db}      = $conf::SQLDB   if (defined $conf::SQLDB);
@@ -131,10 +132,10 @@ sub read_config
     undef $conf::SQLPASS;
 
     # Now read slurm-joblog.conf
-    -r $rw  || log_fatal ("Unable to read required config file: $rw.\n");
+    -r $rw  || return log_error ("Unable to read required config file: $rw.\n");
     unless (my $rc = do $rw) {
-        log_fatal ("Couldn't parse $rw: $@\n") if $@;
-        log_fatal ("couldn't run $rw\n") if (defined $rc && !$rc);
+        return log_error ("Couldn't parse $rw: $@\n") if $@;
+        return log_error ("couldn't run $rw\n") if (defined $rc && !$rc);
     }
 
     $conf{sqluser}    = $conf::SQLUSER    if (defined $conf::SQLUSER);

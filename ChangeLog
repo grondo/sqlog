@@ -1,5 +1,11 @@
 2009-04-02 Mark Grondona <mgrondona@llnl.gov>
 
+	* slurm-joblog.pl :
+	  Try to log to text file even if there is a failure reading
+	  one of the config files.
+
+2009-04-02 Mark Grondona <mgrondona@llnl.gov>
+
 	* : tag v0.13.
 
 2009-04-01 Mark Grondona <mgrondona@llnl.gov>
