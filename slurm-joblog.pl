@@ -26,7 +26,8 @@ my $prog = basename $0;
 
 #  List of job variables provided in ENV by SLURM.
 #
-my @SLURMvars = qw(JOBID UID JOBNAME JOBSTATE PARTITION LIMIT START END NODES PROCS);
+my @SLURMvars = qw(JOBID UID JOBNAME JOBSTATE PARTITION LIMIT START END
+                   NODES PROCS);
 
 #  List of parameters (in order) to pass to SQL execute command below.
 #  
@@ -41,7 +42,7 @@ $conf{db}      = "slurm";
 $conf{sqluser} = "slurm";
 $conf{sqlpass} = "";
 $conf{sqlhost} = "sqlhost";
-$conf{stmt_v1} = qq(INSERT INTO slurm_job_log    VALUES (?,?,?,?,?,?,?,?,?,?,?,?));
+$conf{stmt_v1} = qq(INSERT INTO slurm_job_log VALUES (?,?,?,?,?,?,?,?,?,?,?,?));
 $conf{confdir} = "/etc/slurm";
 
 # enables / disables node tracking per job in version 2 schema
@@ -145,9 +146,12 @@ sub read_config
 
 sub get_slurm_vars
 {
-    # if a job is cancelled before it starts, set reasonable defaults for missing variables
-    #   PROCS may be set to the number of requested processors (don't know), force it to 0
-    #   NODECNT may be set to the number of requested nodes (don't know), we don't use this anyway
+    # if a job is cancelled before it starts,
+    # set reasonable defaults for missing variables
+    #   PROCS may be set to the number of requested
+    #         processors (don't know), force it to 0
+    #   NODECNT may be set to the number of requested
+    #           nodes (don't know), we don't use this anyway
     if (not $ENV{NODES}) {
         $ENV{NODES} = "";
         $ENV{PROCS} = 0;
@@ -163,7 +167,8 @@ sub get_slurm_vars
     # get username
     $conf{username}  = getpwuid($conf{uid});
 
-    # set nodecount to 0 if no nodelist is specified, otherwise count the number of nodes
+    # set nodecount to 0 if no nodelist is specified,
+    # otherwise count the number of nodes
     $conf{nodecount} = ($conf{nodes} =~ /^\s*$/) ? 0 : expand($conf{nodes});
 }
 
@@ -191,8 +196,10 @@ sub create_db
 # TODO: Move these to a perl module?
 ########################################
 
-# cache for name ids, saves us from hitting the database over and over at the cost of more memory
-# not really needed in this case (insert of a single job), but this way, the functions are the same as sqlog-db-util
+# cache for name ids, saves us from hitting the database
+# over and over at the cost of more memory
+# not really needed in this case (insert of a single job),
+# but this way, the functions are the same as sqlog-db-util
 my %IDcache = ();
 %{$IDcache{nodes}} = ();
 
@@ -241,7 +248,8 @@ sub get_last_insert_id
     return $id;
 }
 
-# given a table and name, read id for name from table and add to id cache if found
+# given a table and name,
+# read id for name from table and add to id cache if found
 sub read_id
 {
     my $dbh   = shift @_;
@@ -281,14 +289,17 @@ sub read_write_id
     my $table = shift @_;
     my $name  = shift @_;
 
-    # attempt to read the id first, if not found, insert it and return the last insert id
+    # attempt to read the id first,
+    # if not found, insert it and return the last insert id
     my $id = read_id ($dbh, $table, $name);
     if (not defined $id) {
         my $q_name = $dbh->quote($name);
-        my $sql = "INSERT IGNORE INTO `$table` (`id`,`name`) VALUES (NULL,$q_name);";
+        my $sql = "INSERT IGNORE INTO `$table` (`id`,`name`)" .
+                  " VALUES (NULL,$q_name);";
         my $sth = $dbh->prepare($sql);
         if ($sth->execute ()) {
-            # user read_id here instead of get_last_insert_id to avoid race conditions
+            # user read_id here instead of get_last_insert_id
+            # to avoid race conditions
             $id = read_id ($dbh, $table, $name);
             if (not defined $id) {
                 log_error ("Error inserting new record (id undefined): $sql\n");
@@ -298,7 +309,8 @@ sub read_write_id
                 $id = 0;
             }
         } else {
-            log_error ("Error inserting new record: $sql --> " . $dbh->errstr . "\n");
+            log_error ("Error inserting new record: $sql --> " .
+                       $dbh->errstr . "\n");
             $id = 0;
         }
     }
@@ -306,7 +318,8 @@ sub read_write_id
     return $id;
 }
 
-# given a reference to a list of nodes, read their ids from the nodes table and add them to the id cache
+# given a reference to a list of nodes,
+# read their ids from the nodes table and add them to the id cache
 sub read_node_ids
 {
     my $dbh       = shift @_;
@@ -338,7 +351,8 @@ sub read_node_ids
     return $success;
 }
 
-# given a reference to a list of nodes, insert them into the nodes table and add their ids to the id cache
+# given a reference to a list of nodes,
+# insert them into the nodes table and add their ids to the id cache
 sub read_write_node_ids
 {
     my $dbh       = shift @_;
@@ -370,7 +384,8 @@ sub read_write_node_ids
     return $success;
 }
 
-# given a job_id and a nodelist, insert jobs_nodes records for each node used in job_id
+# given a job_id and a nodelist,
+# insert jobs_nodes records for each node used in job_id
 sub insert_job_nodes
 {
     my $dbh      = shift @_;
@@ -383,7 +398,8 @@ sub insert_job_nodes
 
         # clean up potentially bad nodelist
         if ($nodelist =~ /\[/ and $nodelist !~ /\]/) {
-            # found an opening bracket, but no closing bracket, nodelist is probably incomplete
+            # found an opening bracket, but no closing bracket,
+            # nodelist is probably incomplete
             # chop back to last ',' or '-' and replace with a ']'
             $nodelist =~ s/[,-]\d+$/\]/;
         }
@@ -405,10 +421,13 @@ sub insert_job_nodes
 
         # if we have any nodes for this job, insert them
         if (@values > 0) {
-            my $sql = "INSERT DELAYED IGNORE INTO `jobs_nodes` (`job_id`,`node_id`) VALUES " . join(",", @values) . ";";
+            my $sql = "INSERT DELAYED IGNORE INTO `jobs_nodes`" .
+                      " (`job_id`,`node_id`)" .
+                      " VALUES " . join(",", @values) . ";";
             my $sth = $dbh->prepare($sql);
             if (not $sth->execute ()) {
-                log_error ("Inserting jobs_nodes records for job id $job_id: $sql --> " . $dbh->errstr . "\n");
+                log_error ("Inserting jobs_nodes records for job id" .
+                           " $job_id: $sql --> " . $dbh->errstr . "\n");
                 $success = 0;
             }
         }
@@ -436,8 +455,10 @@ sub value_string_v2
     my $dbh = shift @_;
     my $h   = shift @_;
 
-    # given start and end times, compute the number of seconds the job ran for
-    # TODO: unsure whether this correctly handles jobs that straddle DST changes
+    # given start and end times, compute the number of
+    # seconds the job ran for
+    # TODO: unsure whether this correctly handles jobs
+    # that straddle DST changes
     my $seconds = 0;
     if (defined $h->{StartTime} and $h->{StartTime} !~ /^\s*$/ and
         defined $h->{EndTime}   and $h->{EndTime}   !~ /^\s*$/)
@@ -448,10 +469,14 @@ sub value_string_v2
          if ($seconds < 0) { $seconds = 0; }
     }
 
-    # if Procs is not set, but ppn is specified and NodeCnt is set, compute Procs
-    # (assumes all processors on the node were allocated to the job, only use for clusters
-    # which use whole-node allocation)
-#    if (not defined $h->{Procs} and defined $conf{ppn} and defined $h->{NodeCnt}) {
+    # if Procs is not set, but ppn is specified and NodeCnt is set,
+    # compute Procs (assumes all processors on the node were
+    # allocated to the job, only use for clusters which use
+    # whole-node allocation)
+#    if (not defined $h->{Procs} and defined $conf{ppn} and
+#        defined $h->{NodeCnt}
+#       )
+#    {
 #      $h->{Procs} = $h->{NodeCnt} * $conf{ppn};
 #    }
 
@@ -537,7 +562,8 @@ sub append_job_db
         # insert into v2 schema
         my $sql = "INSERT INTO `jobs` VALUES $value_string;";
         if (not do_sql ($dbh, $sql)) {
-            log_error "Problem inserting into slurm table: $sql: error: ", $dbh->errstr, "\n"; 
+            log_error "Problem inserting into slurm table:" .
+                      " $sql: error: ", $dbh->errstr, "\n"; 
             return 0;
         }
 
@@ -557,7 +583,8 @@ sub append_job_db
             or log_error "prepare: ", $dbh->errstr, "\n";
 
         if (not $sth_v1->execute("NULL", map {convtime_db($_)} @params_v1)) {
-            log_error "Problem inserting into slurm table: ", $dbh->errstr, "\n"; 
+            log_error "Problem inserting into slurm table: ",
+                      $dbh->errstr, "\n"; 
             return 0;
         }
     } else {

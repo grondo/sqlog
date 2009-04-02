@@ -1,9 +1,18 @@
-Version 0.13 (2009-03-03):
- - Add procs column to track number of processors allocated to each
+Version 0.13 (2009-04-01):
+ - Update database schema from v1 to v2.
+ - Added --covert, --backup, --prune, --obfuscate options to
+   sqlog-db-util, as well as, --cores-per-node, --notrack,
+   and --delay-index.  Added "CONVERTING" and "BACKING UP"
+   sections to README to discuss new options.
+ - Added new indicies to schema: increased from just: username
+   to: username, jobname, starttime, endtime, runtime, nodecount,
+   corecount, nodename.  Speeds up common queries.
+ - Add corecount column to track number of cores allocated to each
    job, which is useful for machines like yana and hopi.
+ - Added --ncores, --mincores, --maxcores options to sqlog to
+   specify conditions on new corecount column.
  - Extend nodelist column to fix truncation when very fragmented
    nodelists exceeded the 1024 char limit initially set for the field.
- - Add --numcores, --mincores, --maxcores options to sqlog.
 
 Version 0.12 (2008-12-03):
  - Do not use Date::Manip routines to convert dates to "Unix time"

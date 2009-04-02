@@ -62,9 +62,9 @@ be specified multiple times.
 .TP
 .BI "-n, --nodes " LIST
 Provide a comma-separated list of nodes or node lists to include 
-(or exclude if preceded by the \fI-x\fR, \fI--exclude\fR option). This option may
-be specified multiple times. Node lists can be in hostlist format,
-e.g. host[34-36,67].
+(or exclude if preceded by the \fI-x\fR, \fI--exclude\fR option).
+This option may be specified multiple times. Node lists can be
+in hostlist format, e.g. host[34-36,67].
 .TP
 .BI "-p, --partitions " LIST
 Provide a comma-separated list of partitions to include (or exclude if
@@ -295,7 +295,8 @@ and \fIfreeform\fR, though this is not recommended.
 \fBsqlog\fR provides precise control over the output format, which aids with
 readability and simplifies parsing via scripts.  When parsing output, be sure
 to specify each field and the expected order using the -o,--format option.
-The built-in formats (short, long, and freeform) may add or reorder fields over time.
+The built-in formats (short, long, and freeform) may add or reorder fields
+over time.
 
 By default, \fBsqlog\fR uses the output format 
 .nf
@@ -374,7 +375,7 @@ Job start time in seconds since epoch.
 Job end time in seconds since epoch.
 .TP 0
 
-A format type may be specified in addition to the format fields. These change the output width and in some cases the output format of the fields above. The format type may also be specified alone to the \fI--format\fR option. For instance \fI--format=long\fR would choose the default fields configured for the \fIlong\fR format type.
+A format type may be specified in addition to the format fields.  These change the output width and in some cases the output format of the fields above. The format type may also be specified alone to the \fI--format\fR option. For instance \fI--format=long\fR would choose the default fields configured for the \fIlong\fR format type.
 
 .TP 20
 .B "short"
