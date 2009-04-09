@@ -1644,6 +1644,13 @@ sub excluded_by_time_window
     return 0;
 }
 
+sub reformat_squeue_datetime
+{
+    my ($date) = @_;
+    $date =~ s/(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})/$1 $2/;
+    return $date;
+}
+
 sub query_running_jobs
 {
     my @names = qw/ jobid user uid name state partition limit start end 
@@ -1659,6 +1666,12 @@ sub query_running_jobs
         my %r = ();
         chomp;
         @r{@names} = split (/::/, $_);
+
+        #
+        #  Drop any "T" in datetime string
+        #
+        $r{start} = &reformat_squeue_datetime ($r{start});
+        $r{end} = &reformat_squeue_datetime ($r{end});
 
         $r{runtime} = duration_to_seconds ($r{runtime});
 

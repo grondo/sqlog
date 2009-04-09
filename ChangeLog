@@ -1,5 +1,10 @@
 2009-04-09 Mark Grondona <mgrondona@llnl.gov>
 
+	* sqlog (query_running_jobs, reformat_squeue_datetime) :
+	  Drop the T character from new-style squeue output. SLURM
+	  seems to have introduced this in slurm-1.4, and Date::Manip
+	  doesn't handle it.
+
 	* sqlog (get_seconds_date_manip_is_buggy) :
 	  If date is literally NONE, then just return that value.
 	  Otherwise, try to handle dates that cannot be parsed by
