@@ -1,5 +1,7 @@
 2009-04-09 Mark Grondona <mgrondona@llnl.gov>
 
+	* : tag v0.14.
+
 	* sqlog :
 	  Remove ncores from default short output format.
 
