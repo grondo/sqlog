@@ -1,3 +1,10 @@
+2009-04-09 Mark Grondona <mgrondona@llnl.gov>
+
+	* sqlog (get_seconds_date_manip_is_buggy) :
+	  If date is literally NONE, then just return that value.
+	  Otherwise, try to handle dates that cannot be parsed by
+	  Date::Manip by logging an error and setting them to NONE.
+
 2009-04-02 Mark Grondona <mgrondona@llnl.gov>
 
 	* slurm-joblog.pl :

@@ -1062,13 +1062,23 @@ sub get_seconds_date_manip_is_buggy
     my ($date) = @_;
     use Time::Local;
 
+    return "NONE" if ($date eq "NONE");
+
     my $S = UnixDate ($date, "%S");
     my $M = UnixDate ($date, "%M");
     my $H = UnixDate ($date, "%H");
 
     my $d = UnixDate ($date, "%e");
-    my $m = UnixDate ($date, "%m") - 1;
-    my $y = UnixDate ($date, "%Y") - 1900;
+    my $m = UnixDate ($date, "%m");
+    my $y = UnixDate ($date, "%Y");
+
+    if (!($S && $M && $H && $d && $m && $y)) {
+        &log_verbose ("Malformed date string: \"$date\". Returning NONE.\n");
+        return "NONE";
+    }
+
+    $m -= 1;
+    $y -= 1900;
 
     &log_debug ("timelocal ($S, $M, $H, $d, $m, $y)\n");
 
@@ -1081,7 +1091,7 @@ sub reformat_results
     my $year = (localtime (time))[5] + 1900;
     for my $r (@rows) {
         next if (!$r->{start});
-        
+
         # Drop year for shorter start and end times.
         #  Save year for possible inclusion in output.
         $$r{longend} = $$r{end};
