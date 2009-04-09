@@ -1,5 +1,8 @@
 2009-04-09 Mark Grondona <mgrondona@llnl.gov>
 
+	* sqlog :
+	  Remove ncores from default short output format.
+
 	* sqlog (query_running_jobs, reformat_squeue_datetime) :
 	  Drop the T character from new-style squeue output. SLURM
 	  seems to have introduced this in slurm-1.4, and Date::Manip

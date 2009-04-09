@@ -164,7 +164,7 @@ $conf{formattype} = "short";
 #
 %{$conf{format_list}} = (
   "short" => 
-    "jobid,part,name,user,state,start,runtime,ncores,nnodes,nodes,",
+    "jobid,part,name,user,state,start,runtime,nnodes,nodes,",
   "long"  => 
     "jobid,part,name,user,state,longstart,longend,runtime,ncores,nnodes,nodes",
   "freeform" => 
