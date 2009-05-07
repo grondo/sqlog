@@ -1,3 +1,6 @@
+Version 0.15 (2009-05-07):
+ - Fix sqlog -j, --jobids on systems with v2 database.
+
 Version 0.14 (2009-04-09):
  - Try harder to log to joblog text file when database isn't accessible.
  - Handle datetime of NONE in database.
