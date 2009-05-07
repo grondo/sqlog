@@ -1,3 +1,8 @@
+2009-05-07 Mark Grondona <mgrondona@llnl.gov>
+
+	* sqlog : Fix -j, --jobids option on systems with v2
+	  database.
+
 2009-04-09 Mark Grondona <mgrondona@llnl.gov>
 
 	* : tag v0.14.
