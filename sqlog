@@ -1565,31 +1565,78 @@ sub compose_query
 #
 #  Query running jobs with squeue.
 #
+
+#
+#  Return true if the value $val of job variable $var was not included
+#   or was explictly excluded by any command line options. o/w return false.
+#
 sub var_not_included
 {
     my ($var, $val) = @_;
 
-    if (@{$conf{$var}} && ! grep (/^$val$/i, @{$conf{$var}})) {
+    #
+    #  If --regex was supplied, then user-supplied options are regexes,
+    #   o/w treat them as an exact match.
+    #
+    my $pr = $conf{regex} ? '' : '^';
+    my $pp = $conf{regex} ? '' : '$';
+
+    #
+    #  If there were any supplied query arguments for job variable $var
+    #   (e.g. job_names, users, etc) then return true if $val doesn't
+    #   match at least one of these arguments:
+    #
+    if (@{$conf{$var}} && !grep ({$val =~ m/${pr}$_${pp}/} @{$conf{$var}})) {
         return 1;
     }
 
-    if (@{$conf{exclude}{$var}} && grep (/^$val$/i, @{$conf{exclude}{$var}})) {
+    #
+    #  If any job variables $var were explicitly excluded, then return true
+    #   immediately.
+    #
+    if (@{$conf{exclude}{$var}} &&
+        grep ({$val =~ m/${pr}$_${pp}/} @{$conf{exclude}{$var}})) {
         return 1;
     }
 
     return 0;
 }
 
+#
+#  Given a reference to a hash of job information, return true
+#   if this job is not included due to any list of command-line
+#   parameters issued by the sqlog user.
+#
 sub job_not_included
 {
-    my ($r) = @_;
+    my ($jobinfo) = @_;
 
-    for my $var (qw/jobids users states partitions/) {
-        (my $key = $var) =~ s/s$//;
-        return 1 if var_not_included ($var, $$r{$key});
+    #
+    #  The job_keymap is the list of global config keywords
+    #   to be checked for inclusion/exclusion, as well as the key name
+    #   for these parameters in the job info hash %$jobinfo.
+    #
+    #  Note: this keymap must be updated whenever a non-numeric job
+    #   search key is added to sqlog.
+    #
+    my %job_keymap = (
+        "jobids" => "jobid",
+        "job_names" => "name",
+        "users" => "user",
+        "states" => "state",
+        "partitions" => "partition",
+    );
+    #
+    #  Loop over each job key in job_keymap and check whether this
+    #   job variable was not included or explicitly excluded by
+    #   command line options.
+    #
+    for my $key (keys %job_keymap) {
+        return 1 if var_not_included ($key, $$jobinfo{$job_keymap{$key}});
     }
     return 0;
 }
+
 
 sub time_not_included
 {

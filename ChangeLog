@@ -1,5 +1,8 @@
 2009-10-10  Mark Grondona <mgrondona@llnl.gov>
 
+	* sqlog : Refactor code for running job selection, and fix
+	  -J, --job-names processing on running jobs.
+
 	* sqlog-db-util : Fix  -L --localhost processing. 
 
 2009-05-07 Mark Grondona <mgrondona@llnl.gov>
