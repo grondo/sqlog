@@ -101,7 +101,6 @@ $conf{track} = 1;
 
 read_config ();
 
-$conf{sqlhost} = "localhost" if ($conf{localhost});
 
 ##############################
 #  Parse Command-line
@@ -312,7 +311,7 @@ sub disconnect_db_rw
 sub connect_db_root
 {
     my $str  = "DBI:mysql(PrintError=>0):;";
-    my $host = $conf{use_localhost} ? "localhost" : $conf{sqlhost};
+    my $host = $conf{localhost} ? "localhost" : $conf{sqlhost};
 
     $str .= "host=$host";
 
