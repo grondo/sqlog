@@ -1,15 +1,33 @@
 #!/usr/bin/perl -w
 ###############################################################################
-# $Author: grondo $
-# $Date: 2007-07-13 12:53:05 -0700 (Fri, 13 Jul 2007) $
-# $Rev: 6233 $
+#  $Id$
+#******************************************************************************
+#  Copyright (C) 2007-2009  Lawrence Livermore National Security, LLC.
+#  Produced at Lawrence Livermore National Laboratory (cf, DISCLAIMER).
+#  Written by Adam Moody <moody20@llnl.gov> and
+#             Mark Grondona <mgrondona@llnl.gov>
+#
+#  UCRL-CODE-235340.
+#
+#  This file is part of sqlog.
+#
+#  This is free software; you can redistribute it and/or modify it
+#  under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This is distributed in the hope that it will be useful, but WITHOUT
+#  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+#  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+#  for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, see <http://www.gnu.org/licenses/>.
 ###############################################################################
 #
-# To be run by slurm controller to insert
-# job completion data into MySQL database
+#  This script is run by the SLURM controller at every job completion
+#   to insert records in the job completion database.
 #
-# Creator: Adam Moody <moody20@llnl.gov>
-# Modified by Mark Grondona <mgrondona@llnl.gov>
 #
 require 5.005;
 use strict;
