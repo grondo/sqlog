@@ -1,5 +1,7 @@
 2009-10-12  Mark Grondona <mgrondona@llnl.gov>
 
+	* sqlog : Fix --regex queries against v2 database format.
+
 	* sqlog : Don't treat filter arguments for running jobs
 	  as regular expressions unles --regex was used.
 

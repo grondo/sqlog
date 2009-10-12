@@ -1211,9 +1211,9 @@ sub lookup_ids
 {
     my $dbh   = shift @_;
     my $table = shift @_;
-    my $in    = shift @_;
     my $names_ref = shift @_;
     my $ids_ref   = shift @_;
+    my $in    = $conf{regex} ? "REGEXP" : "IN";
 
     # set ids to an empty list to begin
     @$ids_ref = ();
@@ -1222,6 +1222,9 @@ sub lookup_ids
     my $sql = "SELECT * FROM `$table`" .
               " WHERE `name` $in " . quote_list ($dbh, @$names_ref) . ";";
     my $sth = $dbh->prepare($sql);
+
+    log_verbose ("Running query: \"$sql\"\n");
+
     if ($sth->execute()) {
         while (my ($id, $name) = $sth->fetchrow_array ()) {
             push @$ids_ref, $id;
@@ -1241,8 +1244,7 @@ sub stmt_list
 
     my @result = ();
 
-    my $in = $conf{regex} ? "REGEXP": "IN";
-    my $operator = $excluded ? "NOT $in" : $in;
+    my $operator = $excluded ? "NOT IN" : "IN";
 
     # for version 2, we need to lookup ids for
     # users,states,partions,and jobnames
@@ -1264,14 +1266,14 @@ sub stmt_list
         foreach my $key (keys %tables) {
             if ($excluded) {
                 if (@{$conf{exclude}{$key}}) {
-                    lookup_ids ($dbh, $tables{$key}, $in,
+                    lookup_ids ($dbh, $tables{$key},
                         \@{$conf{exclude}{$key}},
                         \@{$conf{exclude_ids}{$key}}
                     );
                 }
             } else {
                 if (@{$conf{$key}}) {
-                    lookup_ids ($dbh, $tables{$key}, $in,
+                    lookup_ids ($dbh, $tables{$key},
                         \@{$conf{$key}},
                         \@{$conf{include_ids}{$key}}
                     );
@@ -1473,22 +1475,15 @@ sub compose_query
         (@{$conf{nodes}} or @{$conf{exclude}{nodes}})
        )
     {
-        # TODO: want to use a regex here?  If so, must be worried
-        # about 'atlas2' triggering 'atlas20' and 'atlas200', etc
-        # and maybe this isn't as useful since we can do range
-        # syntax already, e.g., atlas[200-299]' fetches regex of 'atlas2..'
-        #my $in = $conf{regex} ? "REGEXP": "IN";
-        my $in = "IN";
-
         # lookup ids for lists of node names to include or exclude
         @{$conf{include_ids}{nodes}} = ();
         @{$conf{exclude_ids}{nodes}} = ();
         if (@{$conf{nodes}}) {
-            lookup_ids ($dbh, "nodes", $in, \@{$conf{nodes}},
+            lookup_ids ($dbh, "nodes", \@{$conf{nodes}},
                 \@{$conf{include_ids}{nodes}});
         }
         if (@{$conf{exclude}{nodes}}) {
-            lookup_ids ($dbh, "nodes", $in, \@{$conf{exclude}{nodes}},
+            lookup_ids ($dbh, "nodes", \@{$conf{exclude}{nodes}},
                 \@{$conf{exclude_ids}{nodes}});
         }
 
