@@ -1597,15 +1597,14 @@ sub var_not_included
     #  If --regex was supplied, then user-supplied options are regexes,
     #   o/w treat them as an exact match.
     #
-    my $pr = $conf{regex} ? '' : '^';
-    my $pp = $conf{regex} ? '' : '$';
+    my $sub = $conf{regex} ? sub {$_[0] =~ m/$_[1]/} : sub {$_[0] eq $_[1]};
 
     #
     #  If there were any supplied query arguments for job variable $var
     #   (e.g. job_names, users, etc) then return true if $val doesn't
     #   match at least one of these arguments:
     #
-    if (@{$conf{$var}} && !grep ({$val =~ m/${pr}$_${pp}/} @{$conf{$var}})) {
+    if (@{$conf{$var}} && !grep ( {&$sub($val, $_)} @{$conf{$var}})) {
         return 1;
     }
 
@@ -1614,7 +1613,7 @@ sub var_not_included
     #   immediately.
     #
     if (@{$conf{exclude}{$var}} &&
-        grep ({$val =~ m/${pr}$_${pp}/} @{$conf{exclude}{$var}})) {
+        grep ({&$sub($val, $_)} @{$conf{exclude}{$var}})) {
         return 1;
     }
 

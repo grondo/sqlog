@@ -1,3 +1,8 @@
+2009-10-12  Mark Grondona <mgrondona@llnl.gov>
+
+	* sqlog : Don't treat filter arguments for running jobs
+	  as regular expressions unles --regex was used.
+
 2009-10-10  Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog : Refactor code for running job selection, and fix
