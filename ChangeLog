@@ -1,5 +1,7 @@
 2009-10-12  Mark Grondona <mgrondona@llnl.gov>
 
+	* : tag v0.16.
+
 	* sqlog : Fix --regex queries against v2 database format.
 
 	* sqlog : Don't treat filter arguments for running jobs

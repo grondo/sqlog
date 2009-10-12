@@ -1,3 +1,8 @@
+Version 0.15 (2009-10-12):
+ - Fix broken sqlog-db-util -L, --localhost option.
+ - Fix job name (-J, --job-name) filtering for running jobs.
+ - Fix use of --regex queries on running jobs and against v2 database.
+
 Version 0.15 (2009-05-07):
  - Fix sqlog -j, --jobids on systems with v2 database.
 
