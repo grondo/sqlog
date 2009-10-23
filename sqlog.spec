@@ -41,8 +41,8 @@ perl -pli -e "s|/etc/slurm|%{_slurm_sysconfdir}|g;
 
 install -D -m 755 sqlog  ${RPM_BUILD_ROOT}/%{_bindir}/sqlog
 install -D -m 644 sqlog.1 ${RPM_BUILD_ROOT}/%{_mandir}/man1/sqlog.1
-install -D -m 755 skewstats  ${RPM_BUILD_ROOT}/%{_bindir}/sqlog
-install -D -m 644 skewstats.1 ${RPM_BUILD_ROOT}/%{_mandir}/man1/sqlog.1
+install -D -m 755 skewstats  ${RPM_BUILD_ROOT}/%{_bindir}/skewstats
+install -D -m 644 skewstats.1 ${RPM_BUILD_ROOT}/%{_mandir}/man1/skewstats.1
 install -D -m 755 sqlog-db-util ${RPM_BUILD_ROOT}/%{_sbindir}/sqlog-db-util
 install -D -m 644 sqlog-db-util.8 ${RPM_BUILD_ROOT}/%{_mandir}/man8/sqlog-db-util.8
 install -D -m 755 slurm-joblog.pl \
