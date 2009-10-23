@@ -1,5 +1,7 @@
 2009-10-23  Mark Grondona <mgrondona@llnl.gov>
 
+	* : tag v0.17.
+
 	* skewstats, skewstats.1, sqlog.spec :
 	  Add skewstats utility to sqlog package.
 
