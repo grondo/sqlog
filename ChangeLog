@@ -1,3 +1,11 @@
+2009-10-16  Mark Grondona <mgrondona@llnl.gov>
+
+	* sqlog.1 : Update documentation of --regex.
+
+	* sqlog : Replace global conf{regex} boolean with conf{regex}{key}
+	  to allow per-key setting of regex matching vs exact matching. 
+	  The --regex flag now operates similar to --exclude.
+
 2009-10-12  Mark Grondona <mgrondona@llnl.gov>
 
 	* : tag v0.16.

@@ -60,7 +60,7 @@ current queue of running jobs.
                               Use '--states=list' to list valid state names.
     -u, --users=LIST...      Comma-separated list of users.
 
-        --regex              Enable regular expression matching for the above.
+        --regex              Following option is regex match instead of exact.
 
     -x, --exclude            Exclude the following list of jobids, users, 
                               states, partitions, or nodes.
@@ -372,8 +372,18 @@ sub conf_init
     @{$conf{userfmt}}             = ();
 
     for (qw/jobids users states partitions nodes job_names/) {
+
+        #
+        #  Initialize include and exclude lists for this key:
+        #
         @{$conf{$_}} = ();
         @{$conf{exclude}{$_}} = ();
+
+        #
+        #  By default matches are exact unless --regex is used.
+        #
+        $conf{regex}{$_} = 0;
+        $conf{match_operator}{$_} = "IN";
     }
 
     for (qw/attime starttime endtime/) {
@@ -475,7 +485,7 @@ sub parse_cmdline
         "no-header|H"    => \$conf{noheader},
         "verbose|v+"     => \$conf{verbose},
         "exclude|x"      => \$conf{got_exclude},
-        "regex"          => \$conf{regex},
+        "regex"          => \$conf{got_regex},
         "limit|L=i"      => \$conf{limit},
         "no-running|X"   => \$conf{no_running},
         "no-db"          => \$conf{nodb},
@@ -891,12 +901,28 @@ sub duration_to_seconds
     return (($s||0) + ($m||0) * 60 + ($h||0) * 3600 + ($d||0) * 3600 * 24);
 }
 
+#
+#  Append job filter options to global configuration, appending to
+#   the "excluded" lists if --exclude was used.
+#
+#  Also, if --regex was specified before this parameter, then add this
+#   key to the global regex config option.
+#
 sub append_excluded
 {
     my ($name, $arg) = @_;
     my $exclude = $conf{got_exclude};
 
     $name =~ s/-/_/g;
+
+    #
+    #  If --regex was used before this option, then note that the
+    #   argument for $name is a regex:
+    #
+    if ($conf{got_regex}) {
+        $conf{regex}{$name} = 1;
+        $conf{match_operator}{$name} = "REGEXP";
+    }
 
     my $list = $exclude ? $conf{exclude}{$name} : $conf{$name};
 
@@ -907,8 +933,9 @@ sub append_excluded
         push (@$list, expand ($arg));
     }
 
-    # Nullify exclude for next argument
+    # Nullify exclude and regex options for next argument:
     $conf{got_exclude} = 0;
+    $conf{got_regex} = 0;
 }
 
 sub format_runtime
@@ -1207,29 +1234,42 @@ sub quote_list
     return "(" . join (',', (map { $dbh->quote ($_) } @list)) . ")";
 }
 
+#
+#  Return the ids list from the corresponding table for job data $name
+#   given the filter arguments $arg:
+#
 sub lookup_ids
 {
-    my $dbh   = shift @_;
-    my $table = shift @_;
-    my $names_ref = shift @_;
-    my $ids_ref   = shift @_;
-    my $in    = $conf{regex} ? "REGEXP" : "IN";
+    my ($dbh, $key, $args) = @_;
+    my @ids = ();
+    my %tables = (
+        "users"      => "usernames",
+        "states"     => "jobstates",
+        "partitions" => "partitions",
+        "job_names"  => "jobnames",
+    );
 
-    # set ids to an empty list to begin
-    @$ids_ref = ();
+    return (@ids) if !@$args;
+
+    &log_debug ("lookup_ids (DBH, key=$key, args=\"@$args\")\n");
 
     # lookup matching names from table and insert ids
-    my $sql = "SELECT * FROM `$table`" .
-              " WHERE `name` $in " . quote_list ($dbh, @$names_ref) . ";";
+    my $sql = "SELECT * FROM `$tables{$key}`" .
+              " WHERE `name` " .
+              $conf{match_operator}{$key} . " " .
+              quote_list ($dbh, @$args) . ";";
+
     my $sth = $dbh->prepare($sql);
 
     log_verbose ("Running query: \"$sql\"\n");
 
     if ($sth->execute()) {
         while (my ($id, $name) = $sth->fetchrow_array ()) {
-            push @$ids_ref, $id;
+            push @ids, $id;
         }
     }
+
+    return @ids;
 }
 
 sub stmt_list
@@ -1249,12 +1289,6 @@ sub stmt_list
     # for version 2, we need to lookup ids for
     # users,states,partions,and jobnames
     if ($version > 1) {
-        my %tables = (
-            "users"      => "usernames",
-            "states"     => "jobstates",
-            "partitions" => "partitions",
-            "job_names"  => "jobnames",
-        );
         my %fields = (
             "users"      => "username_id",
             "states"     => "jobstate_id",
@@ -1262,23 +1296,21 @@ sub stmt_list
             "job_names"  => "jobname_id",
         );
 
-        # lookup ids from name tables
-        foreach my $key (keys %tables) {
+        foreach my $key (keys %fields) {
+
+            #
+            #  Lookup ids (included or excluded) for key $key
+            #   and store in include_ids or exclude_ids list.
+            #
+            my $listref = \@{$conf{$key}};
+            my $type =   'include_ids';
+
             if ($excluded) {
-                if (@{$conf{exclude}{$key}}) {
-                    lookup_ids ($dbh, $tables{$key},
-                        \@{$conf{exclude}{$key}},
-                        \@{$conf{exclude_ids}{$key}}
-                    );
-                }
-            } else {
-                if (@{$conf{$key}}) {
-                    lookup_ids ($dbh, $tables{$key},
-                        \@{$conf{$key}},
-                        \@{$conf{include_ids}{$key}}
-                    );
-                }
+                $listref = \@{$conf{exclude}{$key}};
+                $type    = 'exclude_ids';
             }
+
+            @{$conf{$type}{$key}} = &lookup_ids ($dbh, $key, $listref);
         }
 
         # first insert jobids
@@ -1476,16 +1508,10 @@ sub compose_query
        )
     {
         # lookup ids for lists of node names to include or exclude
-        @{$conf{include_ids}{nodes}} = ();
-        @{$conf{exclude_ids}{nodes}} = ();
-        if (@{$conf{nodes}}) {
-            lookup_ids ($dbh, "nodes", \@{$conf{nodes}},
-                \@{$conf{include_ids}{nodes}});
-        }
-        if (@{$conf{exclude}{nodes}}) {
-            lookup_ids ($dbh, "nodes", \@{$conf{exclude}{nodes}},
-                \@{$conf{exclude_ids}{nodes}});
-        }
+        @{$conf{include_ids}{nodes}} =
+                &lookup_ids ($dbh, "nodes", \@{$conf{nodes}});
+        @{$conf{exclude_ids}{nodes}} =
+                &lookup_ids ($dbh, "nodes", \@{$conf{exclude}{nodes}});
 
         # list of nodes to include specified, but no matching ids found,
         # set WHERE to return NULL set
@@ -1592,7 +1618,8 @@ sub var_not_included
     #  If --regex was supplied, then user-supplied options are regexes,
     #   o/w treat them as an exact match.
     #
-    my $sub = $conf{regex} ? sub {$_[0] =~ m/$_[1]/} : sub {$_[0] eq $_[1]};
+    my $sub = $conf{regex}{$var} ?
+        sub {$_[0] =~ m/$_[1]/} : sub {$_[0] eq $_[1]};
 
     #
     #  If there were any supplied query arguments for job variable $var
