@@ -36,10 +36,13 @@ perl -pli -e "s|/etc/slurm|%{_slurm_sysconfdir}|g;
 	      s|/usr/bin/perl|%{_perl_path}|;
 	      s|^use lib qw\(\);|use lib qw(%{_perl_libpaths});|;
 	      s|^(\\\$ENV\{PATH\}) = '[^']*';|\$1 = '%{_path_env_var}';|;" \
-	sqlog sqlog.1 sqlog-db-util sqlog-db-util.8 slurm-joblog.pl
+	sqlog sqlog.1 sqlog-db-util sqlog-db-util.8 slurm-joblog.pl \
+	skewstats skewstats.1
 
 install -D -m 755 sqlog  ${RPM_BUILD_ROOT}/%{_bindir}/sqlog
 install -D -m 644 sqlog.1 ${RPM_BUILD_ROOT}/%{_mandir}/man1/sqlog.1
+install -D -m 755 skewstats  ${RPM_BUILD_ROOT}/%{_bindir}/sqlog
+install -D -m 644 skewstats.1 ${RPM_BUILD_ROOT}/%{_mandir}/man1/sqlog.1
 install -D -m 755 sqlog-db-util ${RPM_BUILD_ROOT}/%{_sbindir}/sqlog-db-util
 install -D -m 644 sqlog-db-util.8 ${RPM_BUILD_ROOT}/%{_mandir}/man8/sqlog-db-util.8
 install -D -m 755 slurm-joblog.pl \
@@ -53,6 +56,7 @@ rm -rf "$RPM_BUILD_ROOT"
 %defattr(-,root,root)
 %doc README NEWS ChangeLog sqlog.conf.example slurm-joblog.conf.example
 %{_bindir}/sqlog
+%{_bindir}/skewstats
 %{_sbindir}/sqlog-db-util
 %{_mandir}/*/*
 %{_libexecdir}/sqlog

@@ -1,0 +1,129 @@
+.\" $Id$
+.\"
+
+.TH SKEWSTATS 1 "SLURM Queue Stats"
+
+.SH NAME
+skewstats \- report simple SLURM queue statistics 
+
+.SH SYNOPSIS
+.B skewstats
+[\fIOPTIONS\fR]...
+
+.SH DESCRIPTION
+The \fBskewstats\fR utility reports simple SLURM queue statistics 
+such as number of jobs executed and average utilization over
+defined time periods. It uses the \fBsqlog\fR(1) utility to query
+the SLURM job log database, so \fBskewstats\fR can be used to
+report on historical data.
+
+By default \fBskewstats\fR reports number of jobs run during the
+specified time period, as well as the cluster utilization. However,
+other data is available such as average job size, number of jobs
+that started running during the specified time interval, and number
+of jobs that ended. Other data may be included in future versions
+of the script.
+
+The default time window for which \fBskewstats\fR reports when
+run with no arguments is 12AM, today to the current time. Thus
+it is reporting statistics for the current day so far. Both the
+start and end time of the window may be specified with the
+\fI--start\fR and \fI--end\fR options. For instance, to get 
+statistics for the current instant only, \fI--start\fR=\fBnow\fR may be 
+used. See the \fIOPTIONS\fR section below for further information.
+
+Unless the \fI-i, --interval\fR option is used, \fBskewstats\fR
+will display one line of output for the entire time period from
+\fI--start\fR to \fIend\fR. The \fI--interval\fR option can be
+used to break the time period into equal-sized intervals, and 
+stats are summarized for each interval in turn. If the \fI-t, --total\fR
+option is used, a final summary line is displayed for the
+whole time period. 
+
+.SH OPTIONS
+.TP
+.BI "-h, --help"
+Display a summary of the command-line options.
+.TP
+.BI "-v, --verbose"
+Increase debugging verbosity of the program.
+.TP
+.BI "-H, --noheader"
+Do not display a header row in output.
+.TP
+.BI "-s, --start " DATETIME
+Provide a start date and time for the time window of interest.
+The default start time is today, 12AM.
+.TP
+.BI "-e, --end " DATETIME
+Provide an end date and time for the window of interest.
+The default end time is the current time (or \fInow\fR). As a special
+case, if the end DATETIME begins with a plus \fI+\fR, then the end
+date and time is considered to be an offset from the start time.
+.TP
+.BI "-i, --interval " DURATION
+Split time window into intervals of size \fIDURATION\fR. DURATION may
+have the form DD-HH:MM:SS or DDdHHhMMmSSs or DDdaysHHhrMMminSSsec,
+where DD is days, HH is hours, MM is minutes, and SS is seconds. In the
+second two forms, values that are zero may be lef out, e.g. 4hr.
+In the first form, days, hours, and minutes are optional, e.g. :04 
+is 4 seconds.
+.TP
+.BI "-t, --total " 
+Include a final line summarizing statistics for the total time
+period when using the \fI--interval\fR option.
+.TP
+.BI "-o, --output " TYPE
+Select alternate output statistics. By default, TYPE is 
+"utilization" which includes the number of jobs run and the
+cluster utilization during the specified time window. Alternate
+output types include:
+.TP 20
+.B "utilization | util"
+This is default output type. It reports the cluster utilization for the
+configured time window.
+.TP
+.B "jobstats | stats" 
+Report job completion statistics including the number of jobs that ended
+during the time window, and the number of jobs that ended with each of
+the job state codes F = failed, NF = node failure, TO = timed out,
+CA = cancelled, and CD = completed.
+.TP
+.B "jobstarts | starts"
+Report the number of jobs that started during the time window.
+.TP 
+.B "jobsize | size"
+Report simple job size statistics, including the maximum, minimum,
+average, and median job size.
+.TP
+.B "all"
+Report all job statistics at once.
+
+.SH EXAMPLES
+Display number of jobs run and utilization from 3 hrs ago until now:
+.nf
+
+    skewstats --start=-3hr
+
+.fi
+Display statistics since yesterday at 8AM divided into 1hr intervals, 
+including extra job stats such as number of jobs starting and ending
+during each time interval:
+.nf
+
+    skewstats -i 1h -s yesterday,8am --jobstats
+
+.fi
+Display stats for the 4 hour window starting on April 3rd, 2008, 09:00
+.nf
+
+    skewstats --start=2008-04-03T09:00 --end=+3hr
+
+.fi  
+.SH AUTHOR
+Written by Mark Grondona.
+
+.SH "SEE ALSO"
+.BR sqlog (1),
+.BR squeue (1),
+.BR sinfo (1)

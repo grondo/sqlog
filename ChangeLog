@@ -1,3 +1,8 @@
+2009-10-23  Mark Grondona <mgrondona@llnl.gov>
+
+	* skewstats, skewstats.1, sqlog.spec :
+	  Add skewstats utility to sqlog package.
+
 2009-10-16  Mark Grondona <mgrondona@llnl.gov>
 
 	* sqlog.1 : Update documentation of --regex.

@@ -1,0 +1,539 @@
+#!/usr/bin/perl
+###############################################################################
+#  $Id$
+#******************************************************************************
+#  Copyright (C) 2007-2009  Lawrence Livermore National Security, LLC.
+#  Produced at Lawrence Livermore National Laboratory (cf, DISCLAIMER).
+#  Written by Mark Grondona <mgrondona@llnl.gov>
+#
+#  UCRL-CODE-235340.
+#
+#  This file is part of sqlog.
+#
+#  This is free software; you can redistribute it and/or modify it
+#  under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This is distributed in the hope that it will be useful, but WITHOUT
+#  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+#  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+#  for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, see <http://www.gnu.org/licenses/>.
+#
+##############################################################################
+#
+#  skewstats - SLURM Queue Stats 
+#
+#  Report simple SLURM utilization and other statistics for a configurable time 
+#   window optionally split into intervals. Uses the sqlog(1) utility to pull
+#   historical job information from the SLURM job log database.
+#
+##############################################################################
+use strict;
+use Date::Manip;
+use Hostlist qw/ expand compress union /;
+use Getopt::Long qw/ :config gnu_getopt /;
+use Time::HiRes qw/ tv_interval gettimeofday /;
+use File::Basename;
+
+my @utilization = ();
+my %opt = ();
+my $progname = basename ($0);
+
+##############################################################################
+#
+#  Usage:
+#
+
+my $usage = <<EOF
+Usage: $progname [OPTIONS]...
+
+ Report simple SLURM queue statistics such as cluster utilization and
+ total number of jobs run during a given time period. Uses the sqlog(1) 
+ utility to query historical job information from the SLURM job log database.
+
+ -h, --help         Display this help message.
+ -v, --verbose      Increase verbosity.
+ -H, --noheader     Don't include a header row on output.
+
+ -s, --start=DATE   Initial date and time of statistics window.
+                     Default is 12AM of the current day.
+
+ -e, --end=DATE     End date and time of statistics window. The default value 
+                     is the current time.  The DATE value may optionally begin 
+                     with a '+' character, in which case the value is considered
+                     an offset from the start time.  E.g.: --end=+3d would 
+                     specify an end date 3 days past the start date and time.
+
+ -i, --interval=T   Split time window into intervals of size T, e.g.
+                      "1hr" (1 hour), or "30m" (30 minutes), etc.
+
+ -t, --total        When used with -i, --interval, also include total
+                    utilization from --start to --end on last line of output.
+
+ -n, --nnodes=N     Specify a total of N nodes available.
+                     (Default = currently configured node count)
+
+ -o, --output=TYPE  Choose the type of stats to output. Current choices include:
+                    utilization*, jobstats, jobsize, all (* = default).
+
+EOF
+;
+
+##############################################################################
+
+my %fmt = (
+    "starttime"   => { "name" => "STARTTIME",  "fmt" => "@>>>>>>>>>>>>>>" },
+    "endtime"     => { "name" => "ENDTIME",    "fmt" => "@>>>>>>>>>>>>>>" },
+    "njobs"       => { "name" => "NJOBS",      "fmt" => "@######"         },
+    "avgjobsize"  => { "name" => "AVGSZ",      "fmt" => "@###.##"         },
+    "maxsize"     => { "name" => "MAXSZ",      "fmt" => "@####"           },
+    "minsize"     => { "name" => "MINSZ",      "fmt" => "@####"           },
+    "medsize"     => { "name" => "MEDSZ",      "fmt" => "@###.##"         },
+    "njobstarts"  => { "name" => "STARTED",    "fmt" => "@######"         },
+    "njobends"    => { "name" => "ENDED",      "fmt" => "@#####"          },
+    "NF"          => { "name" => "NF",         "fmt" => "@####"           },
+    "F"           => { "name" => "F",          "fmt" => "@####"           },
+    "TO"          => { "name" => "TO",         "fmt" => "@####"           },
+    "CA"          => { "name" => "CA",         "fmt" => "@####"           },
+    "CD"          => { "name" => "CD",         "fmt" => "@####"           },  
+    "utilization" => { "name" => "UTILIZATION","fmt" => "@######.###"     }
+);
+
+##############################################################################
+#
+#  Main script:
+
+&parse_options ();
+
+#
+#  Create user-defined format:
+#
+&format_create ();
+
+#
+#  Get list of jobs between start and end time:
+#
+my @joblist = &get_jobs ();
+my @results = &utilization_loop ($opt{start}, $opt{end}, $opt{interval_s}); 
+
+if (scalar @results > 1 && $opt{print_total}) {
+    push (@results, &utilization ($opt{start}, $opt{end}));
+}
+
+#
+#  Write output using format defined in &format_create()
+#
+write foreach @results;
+
+exit 0;
+##############################################################################
+#
+#  Functions:
+
+sub format_create
+{
+    my $format_top = "";
+    my $format = "";
+    my $common = "";
+    my %count;
+
+    if ($opt{date_format} =~ /^%H:/) {
+        $fmt{starttime}{fmt} =~ s/>>>>>//;
+        $fmt{endtime}{fmt} =~   s/>>>>>//;
+    }
+
+    my @form = grep { !$count{$_}++ } split /\s*,\s*/, $opt{format};
+
+    for my $f (@form) {
+        if (!exists $fmt{$f}) {
+            log_fatal ("Invalid format key \"$f\"\n");
+            next;
+        }
+        $common .= "$fmt{$f}{fmt} ";
+    }
+    $common .= "\n";
+
+    $format .= "format STDOUT = \n";
+    $format .= $common;
+    $format .= join ',', map { '$$_{' . $_ . '}' } @form;
+    $format .= "\n.\n";
+
+    #
+    #  Change '#' and '.' to '>' for format header
+    #
+    $common =~ s/(#|\.)/>/g;
+
+    $format_top .= "format STDOUT_TOP = \n";
+    $format_top .= $common;
+    $format_top .= join ',', map { '"'. $fmt{$_}{name} . '"' } @form;
+    $format_top .= "\n.\n";
+
+    eval $format;
+    eval $format_top unless $opt{noheader};
+}
+
+#
+#  Calculate utilization for all time intervals
+#
+sub utilization_loop
+{
+    my ($t1, $end, $interval) = @_;
+    my $t2;
+    my @results = ();
+
+    #  Loop over all configured intervals printing utilization for each:
+    #
+    do {
+        my $err;
+
+        $t2 = DateCalc ($t1, "+${interval}s", \$err);
+
+        #  Shrink this interval if it extends past end time.
+        #
+        $t2 = $end if (Date_Cmp ($t2, $end) > 0);
+
+        push (@results, &utilization ($t1, $t2));
+
+    } while (Date_Cmp (($t1 = $t2), $end) < 0 && $interval != 0);
+
+    return @results;
+}
+
+#
+#  Calculate some stats (including utilization) for a 
+#   specific time window. Returns a reference to a hash containing
+#   the results.
+#
+sub utilization 
+{
+    my ($t1, $t2) = @_;
+    my $nodesecs = 0;
+    my $njobs = 0;
+    my @nnodes = ();
+    my $totalnodesecs = 0;
+    my $njobstarts = 0;
+    my $njobends = 0;
+    my %states;
+
+    #  Convert start and end time to seconds since epoch for
+    #   quicker calculations and comparisons below.
+    #
+    my $starttime = UnixDate ($t1, "%s");
+    my $endtime   = UnixDate ($t2, "%s");
+
+    #  Total node-seconds available is nnodes * window, unless
+    #   start and end time are the same, in which case we just use
+    #   nnodes (instantaneous snapshot).
+    #
+    $totalnodesecs = ($starttime < $endtime) ? 
+                     ($endtime - $starttime) * $opt{nnodes} : $opt{nnodes};
+
+    for my $job (@joblist) {
+        my $jobstart = $$job{start};
+        my $jobend   = $$job{end};
+
+        #  Continue if this job ran outside the current interval.
+        #
+        next if ($jobend < $starttime || $jobstart > $endtime);
+
+        #  Count number of jobs and keep a list of node count:
+        #
+        $njobs++;
+        push (@nnodes, $$job{nnodes});
+            
+        #  Adjust job start and end times if either fell outside
+        #   the current time window. Otherwise count the number of jobs
+        #   starting and/or ending during this time.
+        #
+        ($jobstart < $starttime) ? $jobstart = $starttime : $njobstarts++;
+        if ($jobend > $endtime) {
+            $jobend = $endtime;    
+        }
+        else {
+            $njobends++;
+            $states{$$job{state}}++;
+        }
+
+        #
+        #  If we're using an instantaneous snapshot, then just count 
+        #   number of nodes used (i.e. runtime == 1).
+        #
+        my $runtime = ($starttime == $endtime) ? 1 : ($jobend - $jobstart);
+
+        #  Add this job's node-seconds used to the total node-seconds
+        #   utilized during this interval:
+        #
+        $nodesecs += ($runtime * $$job{nnodes});
+    }
+
+    my %r = ();
+
+    @nnodes = sort { $a <=> $b } @nnodes;
+
+    $r{t1}           = $t1;
+    $r{t2}           = $t2;
+    $r{starttime}    = UnixDate ($t1, $opt{date_format});
+    $r{endtime}      = UnixDate ($t2, $opt{date_format});
+    $r{totalnodesec} = $totalnodesecs;
+    $r{usednodesec}  = $nodesecs;
+    $r{njobs}        = $njobs;
+    $r{avgjobsize}   = mean (@nnodes);
+    $r{medsize}      = median (@nnodes);
+    $r{maxsize}      = $nnodes[$#nnodes];
+    $r{minsize}      = $nnodes[0];
+    $r{njobstarts}   = $njobstarts;
+    $r{njobends}     = $njobends;
+    $r{utilization}  = ($nodesecs / $totalnodesecs);
+    for my $state (qw/ NF F CA TO CD /) {
+        $r{$state} = $states{$state};
+    }
+
+    return (\%r);
+}
+
+#
+#  Calculate meant of an array of values
+#
+sub mean
+{
+    return 0 unless @_;
+
+    my $total = 0;
+    $total += $_ for @_;
+    return $total / scalar @_;
+}
+
+#
+#  Calculate median of an array of values
+#
+sub median
+{
+    my @s = sort { $a <=> $b } @_;
+    my $n = scalar @s + 1;
+    return (($s[($n/2) + 1] + $s[$n/2])/2) if ($n % 2); 
+    return $s[$n/2];
+}
+
+#
+#  Return a list of job info hashes for all jobs that ran in the
+#   time interval (start, end).
+#
+sub get_jobs
+{
+    my @jobs = ();
+    my $cmd = "sqlog -Ho jid,unixstart,unixend,runtime_s,nnodes,st -L0";
+
+    #  Ignore completing jobs, which don't contribute to utilization
+    #
+    $cmd .= " -xs CG";
+
+    #
+    #  If start time is "now" then there is no need for sqlog to 
+    #   query the db.
+    #
+    $cmd .= $opt{snapshot} ? " --no-db" : "";
+
+    #  Grab jobs that were running during our configured window:
+    #
+    $cmd .= " -t $opt{start}..$opt{end}";
+
+    log_verbose ("Querying jobs from $opt{start} to $opt{end}.\n");
+    log_debug ("Running $cmd\n");
+
+    my $t0 = [gettimeofday];
+
+    open (SQLOG, "$cmd |") or log_fatal ("Failed to run $cmd: $!\n");
+    while (<SQLOG>) {
+        chomp;
+        push (@jobs, job_entry_create (split));
+    }
+    close (SQLOG);
+
+    log_verbose ("sqlog took ", sprintf ("%.3f", tv_interval ($t0)) , "s.\n");
+    log_verbose ("Found ", scalar @jobs, " jobs.\n");
+
+    return @jobs;
+}
+
+#
+#  Return a reference to a hash with job info
+#
+sub job_entry_create
+{
+    return {  
+       "jobid"   => shift,
+       "start"   => shift,
+       "end"     => shift,
+       "runtime" => shift,
+       "nnodes"  => shift,
+       "state"   => shift,
+    };
+}
+
+#
+#  Parse user command line options:
+#
+sub parse_options
+{
+    $opt{verbose} = 0;
+    $opt{date_format} = "%H:%M:%S";
+    $opt{format} = "starttime,endtime,njobs,utilization";
+
+    my $start;
+    my $end;
+    my $err;
+
+    my $rc = GetOptions (\%opt,
+        'help|h',
+        'start|s=s',
+        'end|e=s',
+        'nnodes|n=i',
+        'interval|i=s',
+        'print_total|total|t',
+        'output|o=s',
+        'noheader|H',
+		'verbose|v+',
+
+        #  Undocumented: 
+        'format=s',
+        'date_format|date-format=s',
+    );
+
+    &usage() if defined $opt{help} || ! $rc;
+
+    $opt{format} = "starttime,endtime,njobs,njobstarts,njobends" .
+                   ",avgjobsize,utilization"
+        if ($opt{jobstats});
+
+    #
+    #  Default start time is 12AM today, default end time is "now"
+    #
+    $opt{start} = "today,12am" if (!$opt{start});
+    $opt{end}   = "now"        if (!$opt{end});
+
+    #
+    #  Note that we're doing a snapshot of start time == "now"
+    #
+    $opt{snapshot}++           if ($opt{start} eq "now");
+
+    #
+    #  Set nnodes to the number of nodes configured now if not set
+    #
+    chomp ($opt{nnodes} = `sinfo -ho %D`) if (!$opt{nnodes});
+
+    #
+    #  Special case: If --end option begins with a '+' consider this
+    #   an offset from --start time.
+    #
+    $opt{end} = DateCalc ($opt{start}, "+$opt{end}", \$err) 
+                               if ($opt{end} =~ s/^\+//); 
+
+    #
+    #  Make sure start and end times can be parsed as datetimes:
+    #
+    log_fatal ("Failed to parse datetime \"$opt{start}\"\n") 
+       if (!($start = ParseDate ($opt{start})));
+
+    log_fatal ("Failed to parse datetime \"$opt{end}\"\n") 
+       if (!($end = ParseDate ($opt{end})));
+
+    log_fatal ("Start time \"$opt{start}\" greater than end time \"$opt{end}\"\n")
+       if (Date_Cmp ($start, $end) > 0);
+
+    #
+    #  Convert start and end time to formats useful for sqlog:
+    #
+    $opt{start} = UnixDate ($start, "%Y-%m-%dT%H:%M:%S");
+    $opt{end} =   UnixDate ($end,   "%Y-%m-%dT%H:%M:%S");
+
+    #
+    #  Generate interval in seconds (interval_s):
+    #
+    if (!$opt{interval}) {
+        $opt{interval_s} = UnixDate($end, "%s") - UnixDate($start, "%s");
+    }
+    else {
+        $opt{interval_s} = duration_to_seconds ($opt{interval}) 
+           or log_fatal ("Invalid interval \"$opt{interval}\"\n");
+    }
+
+    #
+    #  Include MM-DD in default date format if start and end were on
+    #   different days.
+    #
+    $opt{date_format} = "%m-%d-%H:%M:%S"
+        if (UnixDate ($opt{start}, "%m%d") != UnixDate ($opt{end}, "%m%d"));
+
+    if ($opt{output}) {
+        my $format = "starttime,endtime,njobs";
+        for (split /,/, $opt{output}) {
+            /^util(ization)?/ && 
+                do { $format .= ",utilization"; next; };
+            /^(job)?stats/         && 
+                do { $format .= ",njobends,F,NF,TO,CA,CD"; next; };
+            /^(job)?starts/        && 
+                do { $format .= ",njobstarts"; next; };
+            /^(job)?size/          &&
+                do { $format .= ",maxsize,minsize,avgjobsize,medsize"; next; };
+            /^all/                 && 
+                do { $format .= ",njobstarts,njobends,maxsize,minsize" .
+                                ",avgjobsize,medsize,F,NF,TO,CA,CD,utilization"; next };
+            log_fatal ("Invalid argument: --output \"$_\"\n");
+        }
+
+        log_debug ("format = $format\n");
+        $opt{format} = $format;
+    }
+
+}
+
+
+#  Convert a duration to seconds. 
+#
+#  Valid duration strings include the common SLURM form D-HH:MM:SS
+#    or the form 3H
+#
+sub duration_to_seconds
+{
+    my ($t) = @_;
+    my ($d, $h, $m, $s);
+
+    #
+    #  list of valid regexes to check in order.
+    #  1. DD-HH:MM:SS type 
+    #  2. 1hr20min or 1h20m type
+    #
+    my @regexes = qw/
+      ^(?:(\d+)(?:-))?(\d*?):?(\d*?):(\d+)$
+      ^(\d*?)(?i:d|days?)?(\d*?)(?i:hr?)?(\d*?)(?i:m|min)?(\d*)(?i:s||sec)?$
+      NOTFOUND
+      /;
+
+    for my $re (@regexes) {
+        return undef if ($re eq "NOTFOUND");
+        last if (($d, $h, $m, $s) = ($t =~ /$re/)) 
+    }
+
+    log_debug ("duration_to_seconds ($t): d=$d h=$h m=$m s=$s\n");
+
+    return (($s||0) + ($m||0) * 60 + ($h||0) * 3600 + ($d||0) * 3600 * 24);
+}
+
+
+sub usage 
+{
+    print STDERR $usage;
+    exit 1;
+}
+
+sub log_msg     { print STDERR "$progname: ", @_; }
+sub log_verbose { log_msg (@_) if ($opt{verbose} > 0); }
+sub log_debug   { log_msg (@_) if ($opt{verbose} > 1); }
+sub log_error   { log_msg ("Error: ", @_);             }
+sub log_fatal   { log_msg ("Fatal: ", @_); exit 1;     }
+
+# vi: ts=4 sw=4 expandtab
