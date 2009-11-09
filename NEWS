@@ -1,3 +1,6 @@
+Version 0.18 (2009-11-09):
+ - Fix bug in sqlog preventing queries with -n, --nodes.
+
 Version 0.17 (2009-10-23):
  - Add the skewstats(1) utility to the sqlog package.
  - The sqlog --regex option now only applies to the following job query
