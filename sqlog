@@ -1247,6 +1247,7 @@ sub lookup_ids
         "states"     => "jobstates",
         "partitions" => "partitions",
         "job_names"  => "jobnames",
+        "nodes"      => "nodes"
     );
 
     return (@ids) if !@$args;

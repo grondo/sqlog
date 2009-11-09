@@ -1,5 +1,10 @@
 2009-10-23  Mark Grondona <mgrondona@llnl.gov>
 
+	* sqlog :
+	  Add missing table name for nodes table in &lookup_ids().
+
+2009-10-23  Mark Grondona <mgrondona@llnl.gov>
+
 	* : tag v0.17.
 
 	* skewstats, skewstats.1, sqlog.spec :
