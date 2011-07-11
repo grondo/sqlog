@@ -1,5 +1,9 @@
 2011-07-11  Mark Grondona <mgrondona@llnl.gov>
 
+	* slurm-joblog.pl :
+	  Use NODECNT environment variable if set instead of counting
+	  node list. Resolves Issue 2.
+
 	* slurm-joblog.pl, sqlog-db-util :
 	  Improve debug and verbose output for better debugging.
 

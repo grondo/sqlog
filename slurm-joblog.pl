@@ -45,7 +45,7 @@ my $prog = basename $0;
 #  List of job variables provided in ENV by SLURM.
 #
 my @SLURMvars = qw(JOBID UID JOBNAME JOBSTATE PARTITION LIMIT START END
-                   NODES PROCS);
+                   NODES PROCS NODECNT);
 
 #  List of parameters (in order) to pass to SQL execute command below.
 #  
@@ -186,9 +186,13 @@ sub get_slurm_vars
     # get username
     $conf{username}  = getpwuid($conf{uid});
 
-    # set nodecount to 0 if no nodelist is specified,
-    # otherwise count the number of nodes
-    $conf{nodecount} = ($conf{nodes} =~ /^\s*$/) ? 0 : expand($conf{nodes});
+    # If NODECNT wasn't set, try counting the list of nodes:
+    if (defined $conf{nodecnt}) {
+        $conf{nodecount} = $conf{nodecnt};
+    }
+    else {
+        $conf{nodecount} = ($conf{nodes} =~ /^\s*$/) ? 0 : expand($conf{nodes});
+    }
 }
 
 sub create_db
