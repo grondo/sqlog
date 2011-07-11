@@ -251,13 +251,14 @@ if ($conf{create} && $dbh) {
     # the db may not exist (couldn't connect), try to create it
     create_db_and_slurm_users ();
 
-    # create version 2 from the beginning on a brand new install
-    log_verbose ("create: Creating version 2 tables.\n");
-    create_slurm_joblog_table_v2 ($dbh);
-
     # try to connect again
     $dbh = connect_db_rw() 
         or log_fatal ("create: Failed to connect to SLURM DB after create!\n");
+
+    # create version 2 from the beginning on a brand new install
+    log_verbose ("create: Creating version 2 tables.\n");
+
+    create_slurm_joblog_table_v2 ($dbh);
 }
 
 # 
@@ -525,7 +526,8 @@ sub drop_slurm_users
 # execute (do) sql statement on dbh
 sub do_sql {
     my ($dbh, $stmt) = @_;
-    log_debug ("SQL: $stmt\n");
+    log_debug ("SQL: [$stmt]\n");
+    $dbh->do ($stmt);
     if (not $dbh->do ($stmt)) {
         log_error ("FAILED SQL: $stmt ERROR: " . $dbh->errstr . "\n");
         return 0;
