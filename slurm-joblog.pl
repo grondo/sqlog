@@ -112,7 +112,7 @@ sub log_msg
         print STDERR @msg;
         return;
     }
-    print LOG @msg;
+    print LOG scalar localtime, ": ", @msg;
     close (LOG);
 }
 
@@ -193,11 +193,6 @@ sub get_slurm_vars
 
 sub create_db
 {
-    if (!$conf{autocreate}) {
-        log_error ("Failed to connect to DB at $conf{sqlhost}\n");
-        return (0);
-    }
-
     my $cmd = "sqlog-db-util --create";
     system ($cmd);
     if ($?>>8) {
@@ -541,6 +536,11 @@ sub append_job_db
     my $dbh = DBI->connect($str, $conf{sqluser}, $conf{sqlpass});
 
     if (!$dbh) {
+        if (!$conf{autocreate}) {
+            log_error ("Failed to connect to DB at $conf{sqlhost}: ",
+                       "$DBI::errstr\n");
+            return (0);
+        }
         create_db() 
             or return (0);
         $dbh = DBI->connect($str, $conf{sqluser}, $conf{sqlpass})

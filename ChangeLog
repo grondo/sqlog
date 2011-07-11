@@ -1,5 +1,8 @@
 2011-07-11  Mark Grondona <mgrondona@llnl.gov>
 
+	* slurm-joblog.pl, sqlog-db-util :
+	  Improve debug and verbose output for better debugging.
+
 	* sqlog-db-util :
 	  Fix CHAOS bz#1204: error setting up DB.
 

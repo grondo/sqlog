@@ -321,7 +321,9 @@ sub connect_db_rw
     my $cstr = "DBI:mysql(PrintError=>0):" .
                "database=$conf{db};host=$conf{sqlhost}:";
 
-    my $dbh = DBI->connect($cstr, $conf{rw}{sqluser}, $conf{rw}{sqlpass});
+    my $dbh = DBI->connect($cstr, $conf{rw}{sqluser}, $conf{rw}{sqlpass})
+       or log_fatal ("Unable to connect to MySQL DB as ",
+                     "$conf{rw}{sqluser}\@$conf{sqlhost}: ", $DBI::errstr, "\n");
 
     $conf{dbh}{rw} = $dbh;
 
@@ -476,6 +478,8 @@ sub show_info
     } elsif (table_exists ($dbh, "slurm_job_log")) {
       $version = 1;
     }
+
+    &log_verbose ("Connected to joblog database version $version\n");
 
     # count the number of jobs in version 1
     my $count_v1 = 0;
