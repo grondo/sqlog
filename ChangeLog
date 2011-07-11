@@ -1,5 +1,7 @@
 2011-07-11  Mark Grondona <mgrondona@llnl.gov>
 
+	* : tag v0.19.
+
 	* slurm-joblog.pl :
 	  Use NODECNT environment variable if set instead of counting
 	  node list. Resolves Issue 2.

@@ -1,3 +1,8 @@
+Version 0.19 (2011-07-11):
+ - Fix Issue 2: Use NODECNT environment variable if set by SLURM.
+ - sqlog-db-util: Fix bug in initial DB creation.
+ - Slightly better debug and error log messages.
+
 Version 0.18 (2009-11-09):
  - Fix bug in sqlog preventing queries with -n, --nodes.
 
