@@ -328,7 +328,7 @@ sub connect_db_rw
                "database=$conf{db};host=$host:";
 
     my $dbh = DBI->connect($cstr, $conf{rw}{sqluser}, $conf{rw}{sqlpass})
-       or log_fatal ("Unable to connect to MySQL DB as ",
+       or log_verbose ("Unable to connect to MySQL DB as ",
                      "$conf{rw}{sqluser}\@$conf{sqlhost}: ", $DBI::errstr, "\n");
 
     $conf{dbh}{rw} = $dbh;
