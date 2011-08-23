@@ -316,10 +316,16 @@ exit 0;
 # Support functions
 #############################
 
+sub db_host_string
+{
+    return $conf{localhost} ? "localhost" : $conf{sqlhost};
+}
+
 sub connect_db_rw
 {
+    my $host = db_host_string ();
     my $cstr = "DBI:mysql(PrintError=>0):" .
-               "database=$conf{db};host=$conf{sqlhost}:";
+               "database=$conf{db};host=$host:";
 
     my $dbh = DBI->connect($cstr, $conf{rw}{sqluser}, $conf{rw}{sqlpass})
        or log_fatal ("Unable to connect to MySQL DB as ",
@@ -339,10 +345,8 @@ sub disconnect_db_rw
 
 sub connect_db_root
 {
-    my $str  = "DBI:mysql(PrintError=>0):;";
-    my $host = $conf{localhost} ? "localhost" : $conf{sqlhost};
-
-    $str .= "host=$host";
+    my $host = db_host_string ();
+    my $str  = "DBI:mysql(PrintError=>0):host=$host;";
 
     $conf{dbh}{root} = DBI->connect ($str, "root", $conf{rw}{rootpass}) 
         or log_fatal ("Unable to connect to MySQL DB as root\@$host: ",
