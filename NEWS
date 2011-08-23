@@ -1,3 +1,8 @@
+Version 0.20 (2011-08-23):
+ - sqlog-db-util: Don't make failure to connect to DB a fatal error for
+    all cases. (Fixes bug in initial DB creation).
+ - sqlog-db-util: Always connect to DB via 'localhost' if -L is used.
+
 Version 0.19 (2011-07-11):
  - Fix Issue 2: Use NODECNT environment variable if set by SLURM.
  - sqlog-db-util: Fix bug in initial DB creation.
