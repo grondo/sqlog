@@ -187,12 +187,19 @@ sub get_slurm_vars
     $conf{username}  = getpwuid($conf{uid});
 
     # If NODECNT wasn't set, try counting the list of nodes:
-    if (defined $conf{nodecnt}) {
-        $conf{nodecount} = $conf{nodecnt};
-    }
-    else {
-        $conf{nodecount} = ($conf{nodes} =~ /^\s*$/) ? 0 : expand($conf{nodes});
-    }
+    #
+    #  XXX: SLURM's NODECNT variable is incorrect in many cases,
+    #  e.g. when a job's state is NODE_FAIL, NODECNT will have been
+    #  decremented at the time the job ends (from the failed node)
+    #  So, we unfortunately cannot trust the NODECNT variable here.
+    #
+    #if (defined $conf{nodecnt}) {
+    #    $conf{nodecount} = $conf{nodecnt};
+    #}
+    #else {
+    #    $conf{nodecount} = ($conf{nodes} =~ /^\s*$/) ? 0 : expand($conf{nodes});
+    #}
+    $conf{nodecount} = ($conf{nodes} =~ /^\s*$/) ? 0 : expand($conf{nodes});
 }
 
 sub create_db
