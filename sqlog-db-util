@@ -99,6 +99,9 @@ logfiles.
     --delay-index      Temporarily disable node tracking indicies for jobs 
                        inserted during convert of backfill operations.
 
+    --recalc-nodecnt   When backfilling, do not use NodeCnt as stored in the
+                       joblog file. Instead recalculate based on  nodelist.
+
     -L, --localhost    Connect to DB over localhost instead of configured 
                        SQL host.
 
@@ -165,6 +168,7 @@ GetOptions (
    "notrack"        => sub { $conf{track} = 0; },
    "delay-index"    => sub { $conf{indicies} = 0; },
    "localhost|L"    => \$conf{localhost},
+   "recalc-nodecnt" => \$conf{recalculate_nodecount},
 ) or usage ();
 
 if (!$conf{create} && !$conf{convert} && !$conf{drop} && 
@@ -1338,6 +1342,16 @@ sub backfill_slurm_joblog_table_to_v2
             if (defined $h{StartTime} and $h{StartTime} =~ m{^\d\d/\d\d-}) {
                 $skipped++;
                 next;
+            }
+
+            if ($conf{recalculate_nodecount} && defined $h{NodeList}) {
+                my $hostlist = $h{NodeList};
+                if ($hostlist =~ /^\s*$/) {
+                    $h{NodeCnt}  = 0;
+                }
+                else {
+                    $h{NodeCnt} = Hostlist::expand($hostlist)
+                }
             }
 
             # convert from slurm log to format for MySQL
