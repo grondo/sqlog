@@ -87,6 +87,11 @@ and rebuilds the indicies.  When converting or inserting lots of records,
 this speeds up the operation, however, it makes things slower when loading
 only a few records.
 .TP
+.BI "--recalc-nodecnt"
+Some versions of SLURM incorrectly set NODECNT in the jobcomp/script plugin
+and thus the nodecount may be incorrect in the sqlog database. Use of this
+option along with a \fB--backfill\fR will fix the incorrect nodecount
+values by recalculating directly from the nodelist in the joblog.
 .BI "-L, --localhost"
 Override the SQL host configuration and connect to DB on localhost.
 (May be required if root user is only allowed access to DB via localhost)
