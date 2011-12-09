@@ -1,3 +1,10 @@
+Version 0.21 (2011-12-08):
+ - slurm-joblogger.pl: Do not use the NODECNT variable. It is likely to
+    be incorrect. Instead always compute nodecount from the nodelist.
+ - sqlog-db-util: Add new --recalc-nodecnt option that recalculates
+    nodecount from nodelist on backfill.
+ - sqlog: Fix "Use of uninitialized value" in sqlog on RUNNING jobs.
+
 Version 0.20 (2011-08-23):
  - sqlog-db-util: Don't make failure to connect to DB a fatal error for
     all cases. (Fixes bug in initial DB creation).
