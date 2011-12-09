@@ -1723,6 +1723,8 @@ sub excluded_by_time_window
     $start = parse_date ($start);
     $end = parse_date ($end);
 
+    log_verbose ("min=$min, max=$max, start=$start, end=$end\n");
+
     return 1 if ($max && Date_Cmp ($start, $max) > 0);
     return 1 if ($min && Date_Cmp ($end,   $min) < 0);
     if ($time) {
@@ -1754,6 +1756,11 @@ sub query_running_jobs
         my %r = ();
         chomp;
         @r{@names} = split (/::/, $_);
+
+        #
+        # Handle ENDTIME == None for running jobs
+        #
+        $r{end} = "2999-12-31-00:00:00" if $r{end} =~ m/(none|unknown)/i;
 
         #
         #  Drop any "T" in datetime string
