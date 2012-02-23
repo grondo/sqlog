@@ -275,6 +275,7 @@ $conf{state_names} = {
     "TIMEOUT"     => [ qw/ to time / ],
     "RUNNING"     => [ qw/ r  run  / ],
     "COMPLETING"  => [ qw/ cg cng  / ],
+    "RESIZING"    => [ qw/ rs rsz  / ],
 };
 
 for my $st (keys %{$conf{state_names}}) {
@@ -1017,7 +1018,8 @@ sub state_name
         "NODE_FAIL" => { "short" => "NF", "long" => "nodefail" },
         "TIMEOUT"   => { "short" => "TO", "long" => "timeout"  },
         "RUNNING"   => { "short" => "R",  "long" => "running" },
-        "COMPLETING"=> { "short" => "CG", "long" => "completing" }
+        "COMPLETING"=> { "short" => "CG", "long" => "completing" },
+        "RESIZING"  => { "short" => "RS", "long" => "resizing" }
     );
     log_error ("Unknown state \"$s\"\n") if (!exists $states{$s});
     my $l = $conf{formattype} eq "short" ? "short" : "long";
