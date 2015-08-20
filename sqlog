@@ -1019,6 +1019,7 @@ sub state_name
         "TIMEOUT"   => { "short" => "TO", "long" => "timeout"  },
         "RUNNING"   => { "short" => "R",  "long" => "running" },
         "COMPLETING"=> { "short" => "CG", "long" => "completing" },
+        "PREEMPTED" => { "short" => "PR", "long" => "preempted" },
         "RESIZING"  => { "short" => "RS", "long" => "resizing" }
     );
     log_error ("Unknown state \"$s\"\n") if (!exists $states{$s});
