@@ -1,3 +1,6 @@
+Version 0.23 (2015-09-02):
+ - Handle SLURM's PREEMPTED state in sqlog(1).
+
 Version 0.22 (2011-12-23):
  - Handle SLURM's RESIZING state in sqlog(1).
 
