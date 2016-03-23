@@ -595,7 +595,7 @@ sub create_slurm_joblog_table_v1
         PRIMARY KEY (id),
         UNIQUE INDEX jobid (jobid,starttime),
         INDEX username (username)
-    ) TYPE=MyISAM;";
+    ) ENGINE=MyISAM;";
     if (not do_sql ($dbh, $sql)) { $success = 0; }
 
     return $success;
@@ -1083,7 +1083,7 @@ sub create_slurm_joblog_table_v2
         INDEX `runtime`      (`runtime`),
         INDEX `nodecount`    (`nodecount`),
         INDEX `corecount`    (`corecount`)
-    ) TYPE=MyISAM;";
+    ) ENGINE=MyISAM;";
     if (not do_sql ($dbh, $sql)) { $success = 0; }
 
     # NOTE: The UNIQUE INDEX below ensures that two jobs with
@@ -1097,7 +1097,7 @@ sub create_slurm_joblog_table_v2
         `id`   INT UNSIGNED  NOT NULL AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(512) NOT NULL,
         UNIQUE INDEX `name` (`name`(512))
-    ) TYPE=MyISAM;";
+    ) ENGINE=MyISAM;";
     if (not do_sql ($dbh, $sql)) { $success = 0; }
 
     # maps partition name strings to unique ids
@@ -1105,7 +1105,7 @@ sub create_slurm_joblog_table_v2
         `id`   INT UNSIGNED  NOT NULL AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(512) NOT NULL,
         UNIQUE INDEX `name` (`name`(512))
-    ) TYPE=MyISAM;";
+    ) ENGINE=MyISAM;";
     if (not do_sql ($dbh, $sql)) { $success = 0; }
 
     # maps job state strings to unique ids
@@ -1113,7 +1113,7 @@ sub create_slurm_joblog_table_v2
         `id`   INT UNSIGNED  NOT NULL AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(512) NOT NULL,
         UNIQUE INDEX `name` (`name`(512))
-    ) TYPE=MyISAM;";
+    ) ENGINE=MyISAM;";
     if (not do_sql ($dbh, $sql)) { $success = 0; }
 
     # maps job name strings to unique ids
@@ -1121,7 +1121,7 @@ sub create_slurm_joblog_table_v2
         `id`   INT UNSIGNED  NOT NULL AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(512) NOT NULL,
         UNIQUE INDEX `name` (`name`(512))
-    ) TYPE=MyISAM;";
+    ) ENGINE=MyISAM;";
     if (not do_sql ($dbh, $sql)) { $success = 0; }
 
     # maps node name strings to unique ids
@@ -1129,7 +1129,7 @@ sub create_slurm_joblog_table_v2
         `id`   INT UNSIGNED  NOT NULL AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(512) NOT NULL,
         UNIQUE INDEX `name` (`name`(512))
-    ) TYPE=MyISAM;";
+    ) ENGINE=MyISAM;";
     if (not do_sql ($dbh, $sql)) { $success = 0; }
 
     # insert a <jobid,nodeid> record for each node a job uses
@@ -1138,7 +1138,7 @@ sub create_slurm_joblog_table_v2
         `node_id` INT UNSIGNED NOT NULL,
         UNIQUE INDEX `job_node` (`job_id`,`node_id`),
         INDEX `node_id` (`node_id`)
-    ) TYPE=MyISAM;";
+    ) ENGINE=MyISAM;";
     if (not do_sql ($dbh, $sql)) { $success = 0; }
 
     return $success;
