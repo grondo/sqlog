@@ -412,7 +412,7 @@ sub read_config
     $conf{rw}{rootpass}   = $conf::SQLROOTPASS if (defined $conf::SQLROOTPASS);
     $conf{rw}{sqlnetwork} = $conf::SQLNETWORK  if (defined $conf::SQLNETWORK);
 
-    @{$conf{rw}{hosts}} = @conf::SQLRWHOSTS if (defined @conf::SQLRWHOSTS);
+    @{$conf{rw}{hosts}} = @conf::SQLRWHOSTS if (@conf::SQLRWHOSTS);
 
     my %seen;
     @{$conf{rw}{hosts}} = grep {$_ && !$seen{$_}++} @{$conf{rw}{hosts}};

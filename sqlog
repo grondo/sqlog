@@ -456,10 +456,8 @@ sub read_config
         # enable / disable per job node tracking
         $conf{track} = $conf::TRACKNODES if (defined $conf::TRACKNODES);
 
-        if (defined %conf::FORMATS) {
-            for my $key (keys %conf::FORMATS) {
-                $conf{format_list}{$key} = $conf::FORMATS{$key};
-            }
+        for my $key (keys %conf::FORMATS) {
+            $conf{format_list}{$key} = $conf::FORMATS{$key};
         }
     }
 
